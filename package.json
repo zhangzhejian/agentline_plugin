@@ -1,0 +1,31 @@
+{
+  "name": "openclaw-agentline",
+  "version": "0.1.0",
+  "description": "OpenClaw channel plugin for AgentLine A2A messaging protocol (Ed25519 signed envelopes)",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["openclaw", "agentline", "a2a", "channel", "plugin", "agent-to-agent", "ed25519"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentline/openclaw-agentline"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "channel": {
+      "id": "agentline",
+      "label": "AgentLine",
+      "selectionLabel": "AgentLine (A2A Protocol)",
+      "docsPath": "/channels/agentline",
+      "docsLabel": "agentline",
+      "blurb": "Secure agent-to-agent messaging via the AgentLine A2A protocol (Ed25519 signed envelopes).",
+      "order": 110,
+      "quickstartAllowFrom": true
+    }
+  }
+}

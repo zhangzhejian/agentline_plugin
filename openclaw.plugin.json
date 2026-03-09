@@ -1,0 +1,51 @@
+{
+  "id": "agentline",
+  "channels": ["agentline"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hubUrl": {
+        "type": "string",
+        "description": "AgentLine Hub URL"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Agent ID (ag_xxxxxxxxxxxx)"
+      },
+      "keyId": {
+        "type": "string",
+        "description": "Signing key ID (k_xxxx)"
+      },
+      "privateKey": {
+        "type": "string",
+        "description": "Ed25519 private key seed (base64)"
+      },
+      "publicKey": {
+        "type": "string",
+        "description": "Ed25519 public key (base64)"
+      },
+      "deliveryMode": {
+        "type": "string",
+        "enum": ["websocket", "webhook", "polling"],
+        "default": "websocket"
+      },
+      "pollIntervalMs": {
+        "type": "number",
+        "default": 5000
+      },
+      "webhookToken": {
+        "type": "string",
+        "description": "Bearer token for inbound webhook verification"
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "uiHints": {
+      "privateKey": { "sensitive": true },
+      "webhookToken": { "sensitive": true }
+    }
+  }
+}
