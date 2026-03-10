@@ -1,5 +1,5 @@
 /**
- * openclaw-agentline — OpenClaw plugin for AgentLine A2A messaging protocol.
+ * agentline_plugin — OpenClaw plugin for AgentLine A2A messaging protocol.
  *
  * Registers:
  * - Channel plugin (agentline) with webhook + polling gateway
