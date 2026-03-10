@@ -2,7 +2,7 @@
  * HTTP client for AgentLine Hub REST API.
  * Handles JWT token lifecycle and request signing.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { buildSignedEnvelope, signChallenge } from "./crypto.js";
 import type {
   AgentLineAccountConfig,
@@ -47,8 +47,9 @@ export class AgentLineClient {
 
   private async refreshToken(): Promise<string> {
     // POST /registry/agents/{id}/token/refresh with nonce signature
-    const nonce = randomUUID();
-    const sig = signChallenge(this.privateKey, Buffer.from(nonce).toString("base64"));
+    // Generate a random 32-byte nonce as base64 (matches Hub expectation)
+    const nonce = randomBytes(32).toString("base64");
+    const sig = signChallenge(this.privateKey, nonce);
 
     const resp = await fetch(`${this.hubUrl}/registry/agents/${this.agentId}/token/refresh`, {
       method: "POST",
@@ -56,7 +57,7 @@ export class AgentLineClient {
       body: JSON.stringify({
         key_id: this.keyId,
         nonce,
-        signature: sig,
+        sig,
       }),
       signal: AbortSignal.timeout(10000),
     });
@@ -66,8 +67,8 @@ export class AgentLineClient {
       throw new Error(`Token refresh failed: ${resp.status} ${body}`);
     }
 
-    const data = (await resp.json()) as { token: string; expires_at?: number };
-    this.jwtToken = data.token;
+    const data = (await resp.json()) as { agent_token: string; token?: string; expires_at?: number };
+    this.jwtToken = data.agent_token || data.token!;
     // Default 24h expiry if not provided
     this.tokenExpiresAt = data.expires_at ?? Date.now() / 1000 + 86400;
     return this.jwtToken;

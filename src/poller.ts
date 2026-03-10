@@ -3,9 +3,8 @@
  * Used when webhook delivery is unavailable or as a fallback.
  */
 import { AgentLineClient } from "./client.js";
-import { dispatchInbound } from "./inbound.js";
+import { handleInboxMessage } from "./inbound.js";
 import { displayPrefix } from "./config.js";
-import type { InboxMessage } from "./types.js";
 
 interface PollerOptions {
   client: AgentLineClient;
@@ -35,7 +34,7 @@ export function startPoller(opts: PollerOptions): { stop: () => void } {
         try {
           await handleInboxMessage(msg, accountId, cfg);
         } catch (err: any) {
-          log?.error(`[${dp}] failed to dispatch message ${msg.id}: ${err.message}`);
+          log?.error(`[${dp}] failed to dispatch message ${msg.hub_msg_id}: ${err.message}`);
         }
       }
     } catch (err: any) {
@@ -70,31 +69,3 @@ export function stopPoller(accountId: string): void {
   if (poller) poller.stop();
 }
 
-async function handleInboxMessage(
-  msg: InboxMessage,
-  accountId: string,
-  cfg: any,
-): Promise<void> {
-  const envelope = msg.envelope;
-  const senderId = envelope.from || "unknown";
-  const content =
-    msg.text ||
-    (typeof envelope.payload === "string"
-      ? envelope.payload
-      : envelope.payload?.text ?? JSON.stringify(envelope.payload));
-  const isRoom = !!msg.room_id;
-
-  await dispatchInbound({
-    cfg,
-    accountId,
-    senderName: senderId,
-    senderId,
-    content: content as string,
-    messageId: envelope.msg_id,
-    chatType: isRoom ? "group" : "direct",
-    groupSubject: isRoom ? (msg.room_name || msg.room_id) : undefined,
-    replyTarget: envelope.from || "",
-    roomId: msg.room_id,
-    topic: msg.topic,
-  });
-}

@@ -6,8 +6,8 @@
  * - Agent tools: agentline_send, agentline_rooms, agentline_contacts, agentline_directory
  * - HTTP route: /agentline_inbox/:accountId for inbound webhooks
  */
-import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk/irc";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk/irc";
+import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { agentLinePlugin } from "./src/channel.js";
 import { setAgentLineRuntime } from "./src/runtime.js";
 import { createWebhookHandler } from "./src/webhook-handler.js";

@@ -6,7 +6,7 @@ import { getAgentLineRuntime } from "./runtime.js";
 import { resolveAccountConfig, displayPrefix } from "./config.js";
 import { AgentLineClient } from "./client.js";
 import { buildSessionKey } from "./session-key.js";
-import type { AgentLineAccountConfig } from "./types.js";
+import type { AgentLineAccountConfig, InboxMessage } from "./types.js";
 
 export interface InboundParams {
   cfg: any;
@@ -33,6 +33,39 @@ async function sendReply(
 ): Promise<void> {
   const client = new AgentLineClient(acct);
   await client.sendMessage(target, text, { topic: options?.topic });
+}
+
+/**
+ * Shared handler for InboxMessage — used by both WebSocket and Poller paths.
+ * Normalizes InboxMessage into InboundParams and dispatches to OpenClaw.
+ */
+export async function handleInboxMessage(
+  msg: InboxMessage,
+  accountId: string,
+  cfg: any,
+): Promise<void> {
+  const envelope = msg.envelope;
+  const senderId = envelope.from || "unknown";
+  const content =
+    msg.text ||
+    (typeof envelope.payload === "string"
+      ? envelope.payload
+      : envelope.payload?.text ?? JSON.stringify(envelope.payload));
+  const isRoom = !!msg.room_id;
+
+  await dispatchInbound({
+    cfg,
+    accountId,
+    senderName: senderId,
+    senderId,
+    content: content as string,
+    messageId: envelope.msg_id,
+    chatType: isRoom ? "group" : "direct",
+    groupSubject: isRoom ? (msg.room_name || msg.room_id) : undefined,
+    replyTarget: isRoom ? msg.room_id! : (envelope.from || ""),
+    roomId: msg.room_id,
+    topic: msg.topic,
+  });
 }
 
 /**

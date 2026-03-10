@@ -3,20 +3,15 @@
  * outbound (send via signed envelopes), gateway (start webhook/polling),
  * security, messaging, and status adapters.
  */
+import type { ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
 import {
-  buildAccountScopedDmSecurityPolicy,
-  createScopedAccountConfigAccessors,
-  formatNormalizedAllowFromEntries,
-} from "openclaw/plugin-sdk/compat";
-import {
-  buildBaseAccountStatusSnapshot,
   buildBaseChannelStatusSummary,
   buildChannelConfigSchema,
+  createDefaultChannelRuntimeState,
   DEFAULT_ACCOUNT_ID,
   deleteAccountFromConfigSection,
   setAccountEnabledInConfigSection,
-  type ChannelPlugin,
-} from "openclaw/plugin-sdk/irc";
+} from "openclaw/plugin-sdk";
 import {
   resolveChannelConfig,
   resolveAccounts,
@@ -84,12 +79,10 @@ function resolveDefaultAccountId(cfg: CoreConfig): string {
 
 // ── Normalize helpers ────────────────────────────────────────────
 
-function normalizeAgentLineTarget(raw: string): string | null {
+function normalizeAgentLineTarget(raw: string): string | undefined {
   const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // Accept ag_ prefixed IDs or room IDs
+  if (!trimmed) return undefined;
   if (trimmed.startsWith("ag_") || trimmed.startsWith("rm_")) return trimmed;
-  // Accept agentline: prefixed
   if (trimmed.startsWith("agentline:")) return trimmed.slice("agentline:".length);
   return trimmed;
 }
@@ -99,48 +92,44 @@ function looksLikeAgentLineId(raw: string): boolean {
   return t.startsWith("ag_") || t.startsWith("rm_") || t.startsWith("agentline:");
 }
 
-function normalizeAllowEntry(entry: string | undefined): string {
-  if (!entry) return "";
-  const t = entry.trim();
-  if (t.startsWith("agentline:")) return t.slice("agentline:".length);
-  return t;
-}
-
-// ── Config accessors ─────────────────────────────────────────────
-
-const agentLineConfigAccessors = createScopedAccountConfigAccessors({
-  resolveAccount: ({ cfg, accountId }) =>
-    resolveAgentLineAccount({ cfg: cfg as CoreConfig, accountId }),
-  resolveAllowFrom: (account: ResolvedAgentLineAccount) => account.config.allowFrom,
-  formatAllowFrom: (allowFrom) =>
-    formatNormalizedAllowFromEntries({
-      allowFrom,
-      normalizeEntry: normalizeAllowEntry,
-    }),
-  resolveDefaultTo: () => undefined,
-});
-
 // ── Config schema ────────────────────────────────────────────────
 
-const AgentLineConfigSchema = {
+const agentLineConfigSchema = {
   type: "object" as const,
+  additionalProperties: false as const,
   properties: {
-    enabled: { type: "boolean" as const, default: true },
+    enabled: { type: "boolean" as const },
     hubUrl: { type: "string" as const, description: "AgentLine Hub URL" },
     agentId: { type: "string" as const, description: "Agent ID (ag_...)" },
     keyId: { type: "string" as const, description: "Key ID for signing" },
-    privateKey: { type: "string" as const, description: "Ed25519 private key (hex)" },
-    publicKey: { type: "string" as const, description: "Ed25519 public key (hex)" },
+    privateKey: { type: "string" as const, description: "Ed25519 private key (base64)" },
+    publicKey: { type: "string" as const, description: "Ed25519 public key (base64)" },
     deliveryMode: {
       type: "string" as const,
       enum: ["websocket", "webhook", "polling"],
-      default: "websocket",
     },
-    pollIntervalMs: { type: "number" as const, default: 5000 },
+    pollIntervalMs: { type: "number" as const },
     webhookToken: { type: "string" as const },
     allowFrom: {
       type: "array" as const,
       items: { type: "string" as const },
+    },
+    accounts: {
+      type: "object" as const,
+      additionalProperties: {
+        type: "object" as const,
+        properties: {
+          enabled: { type: "boolean" as const },
+          hubUrl: { type: "string" as const },
+          agentId: { type: "string" as const },
+          keyId: { type: "string" as const },
+          privateKey: { type: "string" as const },
+          publicKey: { type: "string" as const },
+          deliveryMode: { type: "string" as const, enum: ["websocket", "webhook", "polling"] },
+          pollIntervalMs: { type: "number" as const },
+          webhookToken: { type: "string" as const },
+        },
+      },
     },
   },
 };
@@ -162,36 +151,73 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
     blockStreaming: true,
   },
   reload: { configPrefixes: ["channels.agentline"] },
-  configSchema: buildChannelConfigSchema(AgentLineConfigSchema),
+  configSchema: {
+    schema: agentLineConfigSchema,
+  },
   config: {
     listAccountIds: (cfg) => listAgentLineAccountIds(cfg as CoreConfig),
     resolveAccount: (cfg, accountId) =>
       resolveAgentLineAccount({ cfg: cfg as CoreConfig, accountId }),
     defaultAccountId: (cfg) => resolveDefaultAccountId(cfg as CoreConfig),
-    setAccountEnabled: ({ cfg, accountId, enabled }) =>
-      setAccountEnabledInConfigSection({
-        cfg: cfg as CoreConfig,
-        sectionKey: "agentline",
-        accountId,
-        enabled,
-        allowTopLevel: true,
-      }),
-    deleteAccount: ({ cfg, accountId }) =>
-      deleteAccountFromConfigSection({
-        cfg: cfg as CoreConfig,
-        sectionKey: "agentline",
-        accountId,
-        clearBaseFields: [
-          "hubUrl",
-          "agentId",
-          "keyId",
-          "privateKey",
-          "publicKey",
-          "deliveryMode",
-          "pollIntervalMs",
-          "webhookToken",
-        ],
-      }),
+    setAccountEnabled: ({ cfg, accountId, enabled }) => {
+      const isDefault = accountId === DEFAULT_ACCOUNT_ID;
+      if (isDefault) {
+        return {
+          ...cfg,
+          channels: {
+            ...(cfg as any).channels,
+            agentline: {
+              ...(cfg as any).channels?.agentline,
+              enabled,
+            },
+          },
+        };
+      }
+      const agentlineCfg = (cfg as any).channels?.agentline as AgentLineChannelConfig | undefined;
+      return {
+        ...cfg,
+        channels: {
+          ...(cfg as any).channels,
+          agentline: {
+            ...agentlineCfg,
+            accounts: {
+              ...agentlineCfg?.accounts,
+              [accountId]: {
+                ...agentlineCfg?.accounts?.[accountId],
+                enabled,
+              },
+            },
+          },
+        },
+      };
+    },
+    deleteAccount: ({ cfg, accountId }) => {
+      const isDefault = accountId === DEFAULT_ACCOUNT_ID;
+      if (isDefault) {
+        const next = { ...cfg } as ClawdbotConfig;
+        const nextChannels = { ...(cfg as any).channels };
+        delete (nextChannels as Record<string, unknown>).agentline;
+        if (Object.keys(nextChannels).length > 0) {
+          next.channels = nextChannels;
+        } else {
+          delete next.channels;
+        }
+        return next;
+      }
+      const agentlineCfg = (cfg as any).channels?.agentline as AgentLineChannelConfig | undefined;
+      const accounts = { ...agentlineCfg?.accounts };
+      delete accounts[accountId];
+      return {
+        ...cfg,
+        channels: {
+          ...(cfg as any).channels,
+          agentline: {
+            ...agentlineCfg,
+            accounts: Object.keys(accounts).length > 0 ? accounts : undefined,
+          },
+        },
+      };
+    },
     isConfigured: (account) => account.configured,
     describeAccount: (account) => ({
       accountId: account.accountId,
@@ -202,22 +228,19 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
       agentId: account.agentId,
       deliveryMode: account.deliveryMode,
     }),
-    ...agentLineConfigAccessors,
+    resolveAllowFrom: ({ cfg, accountId }) => {
+      const account = resolveAgentLineAccount({ cfg: cfg as CoreConfig, accountId });
+      return (account.config.allowFrom ?? []).map((entry) => String(entry));
+    },
+    formatAllowFrom: ({ allowFrom }) =>
+      allowFrom
+        .map((entry) => String(entry).trim())
+        .filter(Boolean)
+        .map((entry) => entry.replace(/^agentline:/i, "").toLowerCase()),
   },
   security: {
-    resolveDmPolicy: ({ cfg, accountId, account }) => {
-      return buildAccountScopedDmSecurityPolicy({
-        cfg,
-        channelKey: "agentline",
-        accountId,
-        fallbackAccountId: account.accountId ?? DEFAULT_ACCOUNT_ID,
-        policy: account.config.dmPolicy,
-        allowFrom: account.config.allowFrom ?? [],
-        policyPathSuffix: "dmPolicy",
-        normalizeEntry: (raw) => normalizeAllowEntry(raw),
-      });
-    },
-    collectWarnings: ({ account }) => {
+    collectWarnings: ({ cfg, accountId }) => {
+      const account = resolveAgentLineAccount({ cfg: cfg as CoreConfig, accountId });
       const warnings: string[] = [];
       if (!account.config.privateKey) {
         warnings.push(
@@ -236,7 +259,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
     },
   },
   messaging: {
-    normalizeTarget: normalizeAgentLineTarget,
+    normalizeTarget: (raw) => normalizeAgentLineTarget(raw),
     targetResolver: {
       looksLikeId: looksLikeAgentLineId,
       hint: "<ag_id|rm_id>",
@@ -283,7 +306,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
         return contacts
           .filter((c) => !q || c.agent_id.toLowerCase().includes(q) || c.display_name?.toLowerCase().includes(q))
           .slice(0, limit && limit > 0 ? limit : undefined)
-          .map((c) => ({ kind: "user", id: c.agent_id, name: c.display_name || c.agent_id }));
+          .map((c) => ({ kind: "user" as const, id: c.agent_id, name: c.display_name || c.agent_id }));
       } catch {
         return [];
       }
@@ -298,7 +321,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
         return rooms
           .filter((r) => !q || r.room_id.toLowerCase().includes(q) || r.name?.toLowerCase().includes(q))
           .slice(0, limit && limit > 0 ? limit : undefined)
-          .map((r) => ({ kind: "group", id: r.room_id, name: r.name || r.room_id }));
+          .map((r) => ({ kind: "group" as const, id: r.room_id, name: r.name || r.room_id }));
       } catch {
         return [];
       }
@@ -332,24 +355,22 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
     },
   },
   status: {
-    defaultRuntime: {
-      accountId: DEFAULT_ACCOUNT_ID,
-      running: false,
-      lastStartAt: null,
-      lastStopAt: null,
-      lastError: null,
-    },
-    buildChannelSummary: ({ account, snapshot }) => ({
+    defaultRuntime: createDefaultChannelRuntimeState(DEFAULT_ACCOUNT_ID),
+    buildChannelSummary: ({ snapshot }) => ({
       ...buildBaseChannelStatusSummary(snapshot),
-      hubUrl: account.hubUrl,
-      agentId: account.agentId,
-      deliveryMode: account.deliveryMode,
     }),
     buildAccountSnapshot: ({ account, runtime }) => ({
-      ...buildBaseAccountStatusSnapshot({ account, runtime }),
+      accountId: account.accountId,
+      enabled: account.enabled,
+      configured: account.configured,
+      name: account.name,
       hubUrl: account.hubUrl,
       agentId: account.agentId,
       deliveryMode: account.deliveryMode,
+      running: runtime?.running ?? false,
+      lastStartAt: runtime?.lastStartAt ?? null,
+      lastStopAt: runtime?.lastStopAt ?? null,
+      lastError: runtime?.lastError ?? null,
     }),
   },
   gateway: {
@@ -368,7 +389,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
       const mode = account.deliveryMode || "websocket";
 
       if (mode === "websocket") {
-        // WebSocket: client connects to Hub, no public IP needed
         ctx.log?.info(`[${dp}] starting WebSocket connection to Hub`);
         startWsClient({
           client,
@@ -378,7 +398,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
           log: ctx.log,
         });
       } else if (mode === "webhook") {
-        // Register webhook endpoint with Hub
         const webhookUrl = ctx.runtime.gateway?.getExternalUrl?.();
         if (webhookUrl) {
           try {
@@ -393,7 +412,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
         } else {
           ctx.log?.warn(`[${dp}] webhook mode but no external URL available, falling back to polling`);
         }
-        // Start poller as fallback for webhook
         startPoller({
           client,
           accountId: account.accountId,
@@ -403,7 +421,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
           log: ctx.log,
         });
       } else {
-        // Polling mode
         startPoller({
           client,
           accountId: account.accountId,
