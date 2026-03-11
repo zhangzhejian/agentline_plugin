@@ -1,9 +1,15 @@
 {
-  "name": "agentline_plugin",
-  "version": "0.1.0",
+  "name": "@agentline/plugin",
+  "version": "0.1.1",
   "description": "OpenClaw channel plugin for AgentLine A2A messaging protocol (Ed25519 signed envelopes)",
   "type": "module",
+  "main": "./index.ts",
   "license": "MIT",
+  "files": [
+    "index.ts",
+    "src/",
+    "openclaw.plugin.json"
+  ],
   "keywords": [
     "openclaw",
     "agentline",
@@ -26,8 +32,12 @@
   "dependencies": {
     "ws": "^8.18.0"
   },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.0"
+  },
   "devDependencies": {
     "@types/ws": "^8.5.0",
+    "openclaw": ">=2026.1.0",
     "vitest": "^4.0.18"
   },
   "openclaw": {
