@@ -87,15 +87,16 @@ export async function handleInboxMessage(
     (typeof envelope.payload === "string"
       ? envelope.payload
       : envelope.payload?.text ?? JSON.stringify(envelope.payload));
-  const isRoom = !!msg.room_id;
-  const chatType = isRoom ? "group" : "direct";
+  // DM rooms have rm_dm_ prefix; only non-DM rooms are true group chats
+  const isGroupRoom = !!msg.room_id && !msg.room_id.startsWith("rm_dm_");
+  const chatType = isGroupRoom ? "group" : "direct";
 
   const header = buildInboundHeader({
     type: envelope.type,
     senderName: senderId,
     accountId,
     chatType,
-    roomName: isRoom ? (msg.room_name || msg.room_id) : undefined,
+    roomName: isGroupRoom ? (msg.room_name || msg.room_id) : undefined,
   });
   const content = `${header}\n${rawContent}`;
 
@@ -107,8 +108,8 @@ export async function handleInboxMessage(
     content: content as string,
     messageId: envelope.msg_id,
     chatType,
-    groupSubject: isRoom ? (msg.room_name || msg.room_id) : undefined,
-    replyTarget: isRoom ? msg.room_id! : (envelope.from || ""),
+    groupSubject: isGroupRoom ? (msg.room_name || msg.room_id) : undefined,
+    replyTarget: isGroupRoom ? msg.room_id! : (envelope.from || ""),
     roomId: msg.room_id,
     topic: msg.topic,
   });
@@ -136,14 +137,16 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
   const from = `agentline:${senderId}`;
   const to = `agentline:${accountId}`;
   const dp = displayPrefix(accountId, cfg);
-  const sessionKey = buildSessionKey(roomId, topic);
+  const sessionKey = buildSessionKey(roomId, topic, senderId);
 
   const route = core.channel.routing.resolveAgentRoute({
-    channel: "agentline",
-    from,
-    chatType,
-    groupSubject: chatType === "group" ? (groupSubject || replyTarget) : undefined,
     cfg,
+    channel: "agentline",
+    accountId,
+    peer: {
+      kind: chatType,
+      id: chatType === "group" ? (roomId || replyTarget) : senderId,
+    },
   });
 
   const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);

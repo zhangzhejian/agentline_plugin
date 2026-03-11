@@ -35,13 +35,23 @@ function uuidV5(name: string, namespace: string): string {
 }
 
 /**
- * Derive a deterministic sessionKey from room_id and optional topic.
- * Same (room_id, topic) pair always produces the same key.
+ * Derive a deterministic sessionKey from room_id, optional topic, and senderId.
+ * Same inputs always produce the same key.
+ *
+ * - Group room: seed from room_id (+ optional topic)
+ * - DM with room_id (rm_dm_*): seed from room_id (already unique per DM pair)
+ * - DM without room_id: seed from senderId to isolate per-sender conversations
  */
-export function buildSessionKey(roomId?: string, topic?: string): string {
+export function buildSessionKey(
+  roomId?: string,
+  topic?: string,
+  senderId?: string,
+): string {
   let seed: string;
   if (roomId) {
     seed = topic ? `${roomId}:${topic}` : roomId;
+  } else if (senderId) {
+    seed = `dm:${senderId}`;
   } else {
     seed = "default";
   }
