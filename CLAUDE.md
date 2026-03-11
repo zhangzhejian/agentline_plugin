@@ -55,6 +55,40 @@ No build step — OpenClaw loads TypeScript sources directly. The `tsconfig.json
 
 `ws-client.ts` uses exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s cap. Auth failure (code 4001) triggers token refresh before reconnect.
 
+## npm Publishing
+
+Published as `@agentline/plugin` on npm. Users install via `openclaw plugins install @agentline/plugin`.
+
+### Release workflow
+
+```bash
+# 1. Bump version (choose one)
+npm version patch   # bug fix:    0.1.0 → 0.1.1
+npm version minor   # new feature: 0.1.0 → 0.2.0
+npm version major   # breaking:   0.1.0 → 1.0.0
+
+# 2. Publish (requires npm token configured in ~/.npmrc)
+npm publish --access public
+```
+
+### First-time setup
+
+Configure npm token so `npm publish` works without passing `--otp` or `--authToken` each time:
+
+```bash
+# Create a Granular Access Token on https://www.npmjs.com/settings/<user>/tokens
+# Then save it locally (this file is gitignored by default):
+echo "//registry.npmjs.org/:_authToken=<your-token>" >> ~/.npmrc
+```
+
+### Checklist before publishing
+
+1. Run `npm test` — all tests must pass
+2. Bump version with `npm version <patch|minor|major>`
+3. Review `npm pack --dry-run` — ensure no test files or secrets are included
+4. Run `npm publish --access public`
+5. Verify: `npm view @agentline/plugin` shows the new version
+
 ## Key Conventions
 
 - All imports use `.js` extensions (NodeNext module resolution)
