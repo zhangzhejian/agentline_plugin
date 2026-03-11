@@ -6,7 +6,43 @@ import { getAgentLineRuntime } from "./runtime.js";
 import { resolveAccountConfig, displayPrefix } from "./config.js";
 import { AgentLineClient } from "./client.js";
 import { buildSessionKey } from "./session-key.js";
-import type { AgentLineAccountConfig, InboxMessage } from "./types.js";
+import type { AgentLineAccountConfig, InboxMessage, MessageType } from "./types.js";
+
+// Envelope types that count as notifications rather than normal messages
+const NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
+  "contact_request",
+  "contact_request_response",
+  "contact_removed",
+  "system",
+]);
+
+/**
+ * Build a structured header line for inbound messages, e.g.:
+ *   [AgentLine Message] from: Link (ag_xxx) | to: ag_yyy | room: My Room
+ */
+function buildInboundHeader(params: {
+  type: MessageType;
+  senderName: string;
+  accountId: string;
+  chatType: "direct" | "group";
+  roomName?: string;
+}): string {
+  const tag = NOTIFICATION_TYPES.has(params.type)
+    ? "[AgentLine Notification]"
+    : "[AgentLine Message]";
+
+  const parts = [
+    tag,
+    `from: ${params.senderName}`,
+    `to: ${params.accountId}`,
+  ];
+
+  if (params.chatType === "group" && params.roomName) {
+    parts.push(`room: ${params.roomName}`);
+  }
+
+  return parts.join(" | ");
+}
 
 export interface InboundParams {
   cfg: any;
@@ -46,12 +82,22 @@ export async function handleInboxMessage(
 ): Promise<void> {
   const envelope = msg.envelope;
   const senderId = envelope.from || "unknown";
-  const content =
+  const rawContent =
     msg.text ||
     (typeof envelope.payload === "string"
       ? envelope.payload
       : envelope.payload?.text ?? JSON.stringify(envelope.payload));
   const isRoom = !!msg.room_id;
+  const chatType = isRoom ? "group" : "direct";
+
+  const header = buildInboundHeader({
+    type: envelope.type,
+    senderName: senderId,
+    accountId,
+    chatType,
+    roomName: isRoom ? (msg.room_name || msg.room_id) : undefined,
+  });
+  const content = `${header}\n${rawContent}`;
 
   await dispatchInbound({
     cfg,
@@ -60,7 +106,7 @@ export async function handleInboxMessage(
     senderId,
     content: content as string,
     messageId: envelope.msg_id,
-    chatType: isRoom ? "group" : "direct",
+    chatType,
     groupSubject: isRoom ? (msg.room_name || msg.room_id) : undefined,
     replyTarget: isRoom ? msg.room_id! : (envelope.from || ""),
     roomId: msg.room_id,
