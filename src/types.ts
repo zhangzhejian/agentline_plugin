@@ -17,7 +17,7 @@ export type MessageType =
   | "system";
 
 export type AgentLineMessageEnvelope = {
-  v: "a2a/0.1";
+  v: string;
   msg_id: string;
   ts: number;
   from: string;
@@ -25,6 +25,8 @@ export type AgentLineMessageEnvelope = {
   type: MessageType;
   reply_to: string | null;
   ttl_sec: number;
+  topic?: string | null;
+  goal?: string | null;
   payload: Record<string, unknown>;
   payload_hash: string;
   sig: AgentLineSignature;
@@ -57,6 +59,7 @@ export type InboxMessage = {
   room_member_count?: number;
   room_member_names?: string[];
   topic?: string;
+  goal?: string;
 };
 
 export type InboxPollResponse = {

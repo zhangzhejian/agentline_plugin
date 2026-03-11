@@ -69,6 +69,8 @@ export function buildSignedEnvelope(params: {
   keyId: string;
   replyTo?: string | null;
   ttlSec?: number;
+  topic?: string | null;
+  goal?: string | null;
 }): AgentLineMessageEnvelope {
   const {
     from,
@@ -79,6 +81,8 @@ export function buildSignedEnvelope(params: {
     keyId,
     replyTo = null,
     ttlSec = 3600,
+    topic = null,
+    goal = null,
   } = params;
 
   const msgId = randomUUID();
@@ -86,7 +90,7 @@ export function buildSignedEnvelope(params: {
   const payloadHash = computePayloadHash(payload);
 
   // Build signing input (newline-joined fields)
-  const signingInput = [
+  const parts = [
     "a2a/0.1",
     msgId,
     String(ts),
@@ -96,10 +100,10 @@ export function buildSignedEnvelope(params: {
     replyTo || "",
     String(ttlSec),
     payloadHash,
-  ].join("\n");
+  ];
 
   const pk = privateKeyFromSeed(Buffer.from(privateKey, "base64"));
-  const sigValue = sign(null, Buffer.from(signingInput), pk);
+  const sigValue = sign(null, Buffer.from(parts.join("\n")), pk);
 
   const sig: AgentLineSignature = {
     alg: "ed25519",
@@ -116,6 +120,8 @@ export function buildSignedEnvelope(params: {
     type,
     reply_to: replyTo,
     ttl_sec: ttlSec,
+    topic,
+    goal,
     payload,
     payload_hash: payloadHash,
     sig,

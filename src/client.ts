@@ -123,7 +123,7 @@ export class AgentLineClient {
   async sendMessage(
     to: string,
     text: string,
-    options?: { replyTo?: string; topic?: string; ttlSec?: number },
+    options?: { replyTo?: string; topic?: string; goal?: string; ttlSec?: number },
   ): Promise<SendResponse> {
     const envelope = buildSignedEnvelope({
       from: this.agentId,
@@ -134,8 +134,11 @@ export class AgentLineClient {
       keyId: this.keyId,
       replyTo: options?.replyTo,
       ttlSec: options?.ttlSec,
+      topic: options?.topic,
+      goal: options?.goal,
     });
 
+    // topic also sent as query param for backward compat with older hubs
     const topicQuery = options?.topic ? `?topic=${encodeURIComponent(options.topic)}` : "";
     const resp = await this.hubFetch(`/hub/send${topicQuery}`, {
       method: "POST",
