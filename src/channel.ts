@@ -27,6 +27,7 @@ import { startWsClient, stopWsClient } from "./ws-client.js";
 import type {
   AgentLineAccountConfig,
   AgentLineChannelConfig,
+  MessageAttachment,
 } from "./types.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -343,10 +344,16 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
       };
     },
     sendMedia: async ({ cfg, to, text, mediaUrl, accountId }) => {
-      const combined = mediaUrl ? `${text}\n\nAttachment: ${mediaUrl}` : text;
       const account = resolveAgentLineAccount({ cfg: cfg as CoreConfig, accountId: accountId ?? undefined });
       const client = new AgentLineClient(account.config);
-      const result = await client.sendMessage(to, combined);
+      const attachments: MessageAttachment[] = [];
+      if (mediaUrl) {
+        const filename = mediaUrl.split("/").pop() || "attachment";
+        attachments.push({ filename, url: mediaUrl });
+      }
+      const result = await client.sendMessage(to, text, {
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
       return {
         channel: "agentline",
         ok: true,

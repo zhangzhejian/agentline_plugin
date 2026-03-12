@@ -29,11 +29,12 @@ const plugin = {
     // Register channel plugin
     api.registerChannel({ plugin: agentLinePlugin as ChannelPlugin });
 
-    // Register agent tools
-    api.registerTool(createMessagingTool() as any);
-    api.registerTool(createRoomsTool() as any);
-    api.registerTool(createContactsTool() as any);
-    api.registerTool(createDirectoryTool() as any);
+    // Register agent tools (pass config getter for CLI/agent mode where context.config may be absent)
+    const getConfig = () => api.config;
+    api.registerTool(createMessagingTool(getConfig) as any);
+    api.registerTool(createRoomsTool(getConfig) as any);
+    api.registerTool(createContactsTool(getConfig) as any);
+    api.registerTool(createDirectoryTool(getConfig) as any);
 
     // Register HTTP route for inbound webhooks
     api.registerHttpRoute({
@@ -44,5 +45,8 @@ const plugin = {
     });
   },
 };
+
+export { TopicTracker } from "./src/topic-tracker.js";
+export type { TopicState, TopicInfo } from "./src/topic-tracker.js";
 
 export default plugin;
