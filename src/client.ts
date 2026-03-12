@@ -13,6 +13,8 @@ import type {
   AgentInfo,
   ContactInfo,
   ContactRequestInfo,
+  FileUploadResponse,
+  MessageAttachment,
 } from "./types.js";
 
 const MAX_RETRIES = 2;
@@ -84,7 +86,8 @@ export class AgentLineClient {
         Authorization: `Bearer ${token}`,
         ...((init.headers as Record<string, string>) ?? {}),
       };
-      if (init.body) {
+      // Set Content-Type for JSON bodies, but not for FormData (browser/node sets boundary automatically)
+      if (init.body && !(init.body instanceof FormData)) {
         headers["Content-Type"] = "application/json";
       }
 
@@ -118,18 +121,54 @@ export class AgentLineClient {
     throw new Error(`AgentLine ${path} failed: exhausted retries`);
   }
 
+  // ── File upload ──────────────────────────────────────────────
+
+  async uploadFile(
+    file: Buffer | Uint8Array,
+    filename: string,
+    contentType?: string,
+  ): Promise<FileUploadResponse> {
+    const formData = new FormData();
+    const blob = new Blob([file], { type: contentType || "application/octet-stream" });
+    formData.append("file", blob, filename);
+
+    const resp = await this.hubFetch("/hub/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = (await resp.json()) as FileUploadResponse;
+
+    // Server returns a relative URL — make it absolute
+    if (data.url && !data.url.startsWith("http")) {
+      data.url = `${this.hubUrl}${data.url}`;
+    }
+
+    return data;
+  }
+
   // ── Messaging ─────────────────────────────────────────────────
 
   async sendMessage(
     to: string,
     text: string,
-    options?: { replyTo?: string; topic?: string; goal?: string; ttlSec?: number },
+    options?: {
+      replyTo?: string;
+      topic?: string;
+      goal?: string;
+      ttlSec?: number;
+      attachments?: MessageAttachment[];
+    },
   ): Promise<SendResponse> {
+    const payload: Record<string, unknown> = { text };
+    if (options?.attachments && options.attachments.length > 0) {
+      payload.attachments = options.attachments;
+    }
+
     const envelope = buildSignedEnvelope({
       from: this.agentId,
       to,
       type: "message",
-      payload: { text },
+      payload,
       privateKey: this.privateKey,
       keyId: this.keyId,
       replyTo: options?.replyTo,

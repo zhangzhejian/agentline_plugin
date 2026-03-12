@@ -107,3 +107,21 @@ export type ContactRequestInfo = {
   state: "pending" | "accepted" | "rejected";
   created_at: string;
 };
+
+// File upload response (mirrors hub/schemas.py FileUploadResponse)
+export type FileUploadResponse = {
+  file_id: string;
+  url: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  expires_at: string; // ISO 8601
+};
+
+// Attachment metadata included in message payloads
+export type MessageAttachment = {
+  filename: string;
+  url: string;
+  content_type?: string;
+  size_bytes?: number;
+};
