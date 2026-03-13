@@ -59,6 +59,7 @@ export type InboxMessage = {
   room_member_count?: number;
   room_member_names?: string[];
   topic?: string;
+  topic_id?: string;
   goal?: string;
 };
 
@@ -73,6 +74,7 @@ export type SendResponse = {
   queued: boolean;
   hub_msg_id: string;
   status: string;
+  topic_id?: string;
 };
 
 export type RoomInfo = {

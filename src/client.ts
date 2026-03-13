@@ -217,6 +217,7 @@ export class AgentLineClient {
     peer?: string;
     roomId?: string;
     topic?: string;
+    topicId?: string;
     before?: string;
     after?: string;
     limit?: number;
@@ -225,6 +226,7 @@ export class AgentLineClient {
     if (options?.peer) params.set("peer", options.peer);
     if (options?.roomId) params.set("room_id", options.roomId);
     if (options?.topic) params.set("topic", options.topic);
+    if (options?.topicId) params.set("topic_id", options.topicId);
     if (options?.before) params.set("before", options.before);
     if (options?.after) params.set("after", options.after);
     if (options?.limit) params.set("limit", String(options.limit));

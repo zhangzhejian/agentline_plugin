@@ -95,6 +95,7 @@ export function createWebhookHandler(getConfig: () => any) {
         replyTarget: body.from || senderId,
         roomId: body.room_id,
         topic: body.topic,
+        topicId: body.topic_id,
       });
 
       res.writeHead(200, { "Content-Type": "application/json" });

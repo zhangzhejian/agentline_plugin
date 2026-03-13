@@ -56,6 +56,7 @@ export interface InboundParams {
   replyTarget: string;
   roomId?: string;
   topic?: string;
+  topicId?: string;
 }
 
 /**
@@ -112,6 +113,7 @@ export async function handleInboxMessage(
     replyTarget: isGroupRoom ? msg.room_id! : (envelope.from || ""),
     roomId: msg.room_id,
     topic: msg.topic,
+    topicId: msg.topic_id,
   });
 }
 
