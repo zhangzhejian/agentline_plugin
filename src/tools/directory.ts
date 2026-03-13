@@ -4,7 +4,7 @@
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
 
-export function createDirectoryTool() {
+export function createDirectoryTool(getConfig?: () => any) {
   return {
     name: "agentline_directory",
     description:
@@ -41,7 +41,7 @@ export function createDirectoryTool() {
       required: ["action"],
     },
     execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg;
+      const cfg = context?.config ?? context?.cfg ?? getConfig?.();
       if (!cfg) return { error: "No configuration available" };
 
       const acct = resolveAccountConfig(cfg, context?.accountId);

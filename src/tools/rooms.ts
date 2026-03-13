@@ -4,7 +4,7 @@
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
 
-export function createRoomsTool() {
+export function createRoomsTool(getConfig?: () => any) {
   return {
     name: "agentline_rooms",
     description:
@@ -42,7 +42,7 @@ export function createRoomsTool() {
       required: ["action"],
     },
     execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg;
+      const cfg = context?.config ?? context?.cfg ?? getConfig?.();
       if (!cfg) return { error: "No configuration available" };
 
       const acct = resolveAccountConfig(cfg, context?.accountId);

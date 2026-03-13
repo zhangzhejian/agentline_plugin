@@ -4,7 +4,7 @@
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
 
-export function createMessagingTool() {
+export function createMessagingTool(getConfig?: () => any) {
   return {
     name: "agentline_send",
     description:
@@ -33,7 +33,7 @@ export function createMessagingTool() {
       required: ["to", "text"],
     },
     execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg;
+      const cfg = context?.config ?? context?.cfg ?? getConfig?.();
       if (!cfg) return { error: "No configuration available" };
 
       const acct = resolveAccountConfig(cfg, context?.accountId);
