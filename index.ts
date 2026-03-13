@@ -9,7 +9,7 @@
 import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { agentLinePlugin } from "./src/channel.js";
-import { setAgentLineRuntime } from "./src/runtime.js";
+import { setAgentLineRuntime, setConfigGetter } from "./src/runtime.js";
 import { createWebhookHandler } from "./src/webhook-handler.js";
 import { createMessagingTool } from "./src/tools/messaging.js";
 import { createRoomsTool } from "./src/tools/rooms.js";
@@ -23,18 +23,18 @@ const plugin = {
   configSchema: emptyPluginConfigSchema(),
 
   register(api: OpenClawPluginApi) {
-    // Store runtime reference
+    // Store runtime reference and config getter
     setAgentLineRuntime(api.runtime);
+    setConfigGetter(() => api.config);
 
     // Register channel plugin
     api.registerChannel({ plugin: agentLinePlugin as ChannelPlugin });
 
-    // Register agent tools (pass config getter for CLI/agent mode where context.config may be absent)
-    const getConfig = () => api.config;
-    api.registerTool(createMessagingTool(getConfig) as any);
-    api.registerTool(createRoomsTool(getConfig) as any);
-    api.registerTool(createContactsTool(getConfig) as any);
-    api.registerTool(createDirectoryTool(getConfig) as any);
+    // Register agent tools
+    api.registerTool(createMessagingTool() as any);
+    api.registerTool(createRoomsTool() as any);
+    api.registerTool(createContactsTool() as any);
+    api.registerTool(createDirectoryTool() as any);
 
     // Register HTTP route for inbound webhooks
     api.registerHttpRoute({

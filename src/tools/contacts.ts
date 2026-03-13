@@ -3,8 +3,9 @@
  */
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
+import { getConfig as getAppConfig } from "../runtime.js";
 
-export function createContactsTool(getConfig?: () => any) {
+export function createContactsTool() {
   return {
     name: "agentline_contacts",
     description:
@@ -43,7 +44,7 @@ export function createContactsTool(getConfig?: () => any) {
       required: ["action"],
     },
     execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg ?? getConfig?.();
+      const cfg = context?.config ?? context?.cfg ?? getAppConfig();
       if (!cfg) return { error: "No configuration available" };
 
       const acct = resolveAccountConfig(cfg, context?.accountId);
