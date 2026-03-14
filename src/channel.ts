@@ -148,7 +148,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
   },
   capabilities: {
     chatTypes: ["direct", "group"],
-    media: false,
+    media: true,
     blockStreaming: true,
   },
   reload: { configPrefixes: ["channels.agentline"] },
