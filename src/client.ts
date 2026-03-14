@@ -157,6 +157,7 @@ export class AgentLineClient {
       goal?: string;
       ttlSec?: number;
       attachments?: MessageAttachment[];
+      mentions?: string[];
     },
   ): Promise<SendResponse> {
     const payload: Record<string, unknown> = { text };
@@ -177,11 +178,17 @@ export class AgentLineClient {
       goal: options?.goal,
     });
 
+    // Mentions are not part of the signed envelope — attach after signing
+    const body: Record<string, unknown> = { ...envelope };
+    if (options?.mentions && options.mentions.length > 0) {
+      body.mentions = options.mentions;
+    }
+
     // topic also sent as query param for backward compat with older hubs
     const topicQuery = options?.topic ? `?topic=${encodeURIComponent(options.topic)}` : "";
     const resp = await this.hubFetch(`/hub/send${topicQuery}`, {
       method: "POST",
-      body: JSON.stringify(envelope),
+      body: JSON.stringify(body),
     });
     return (await resp.json()) as SendResponse;
   }

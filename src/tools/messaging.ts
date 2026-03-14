@@ -40,6 +40,11 @@ export function createMessagingTool() {
           type: "string" as const,
           description: "Message ID to reply to",
         },
+        mentions: {
+          type: "array" as const,
+          items: { type: "string" as const },
+          description: 'Agent IDs to mention (e.g. ["ag_xxx"]). Use ["@all"] to mention everyone.',
+        },
       },
       required: ["to", "text"],
     },
@@ -61,6 +66,7 @@ export function createMessagingTool() {
             replyTo: args.reply_to,
             topic: args.topic,
             goal: args.goal,
+            mentions: args.mentions,
           });
           return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to };
         }
