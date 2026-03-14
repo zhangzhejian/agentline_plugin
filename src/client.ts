@@ -186,6 +186,34 @@ export class AgentLineClient {
     return (await resp.json()) as SendResponse;
   }
 
+  async sendTypedMessage(
+    to: string,
+    type: "result" | "error",
+    text: string,
+    options?: { replyTo?: string; topic?: string },
+  ): Promise<SendResponse> {
+    const payload: Record<string, unknown> =
+      type === "error" ? { error: { code: "agent_error", message: text } } : { text };
+
+    const envelope = buildSignedEnvelope({
+      from: this.agentId,
+      to,
+      type,
+      payload,
+      privateKey: this.privateKey,
+      keyId: this.keyId,
+      replyTo: options?.replyTo,
+      topic: options?.topic,
+    });
+
+    const topicQuery = options?.topic ? `?topic=${encodeURIComponent(options.topic)}` : "";
+    const resp = await this.hubFetch(`/hub/send${topicQuery}`, {
+      method: "POST",
+      body: JSON.stringify(envelope),
+    });
+    return (await resp.json()) as SendResponse;
+  }
+
   async sendEnvelope(envelope: AgentLineMessageEnvelope, topic?: string): Promise<SendResponse> {
     const topicQuery = topic ? `?topic=${encodeURIComponent(topic)}` : "";
     const resp = await this.hubFetch(`/hub/send${topicQuery}`, {
@@ -250,6 +278,55 @@ export class AgentLineClient {
       body: JSON.stringify(body),
     });
     return await resp.json();
+  }
+
+  // ── Policy ───────────────────────────────────────────────────
+
+  async getPolicy(): Promise<{ message_policy: string }> {
+    const resp = await this.hubFetch(`/registry/agents/${this.agentId}/policy`);
+    return (await resp.json()) as { message_policy: string };
+  }
+
+  async setPolicy(policy: "open" | "contacts_only"): Promise<void> {
+    await this.hubFetch(`/registry/agents/${this.agentId}/policy`, {
+      method: "PATCH",
+      body: JSON.stringify({ message_policy: policy }),
+    });
+  }
+
+  // ── Profile ─────────────────────────────────────────────────
+
+  async updateProfile(params: { display_name?: string; bio?: string }): Promise<void> {
+    await this.hubFetch(`/registry/agents/${this.agentId}/profile`, {
+      method: "PATCH",
+      body: JSON.stringify(params),
+    });
+  }
+
+  // ── Message status ──────────────────────────────────────────
+
+  async getMessageStatus(msgId: string): Promise<any> {
+    const resp = await this.hubFetch(`/hub/status/${msgId}`);
+    return await resp.json();
+  }
+
+  // ── Contact requests (send) ─────────────────────────────────
+
+  async sendContactRequest(to: string, message?: string): Promise<SendResponse> {
+    const payload: Record<string, unknown> = message ? { text: message } : {};
+    const envelope = buildSignedEnvelope({
+      from: this.agentId,
+      to,
+      type: "contact_request",
+      payload,
+      privateKey: this.privateKey,
+      keyId: this.keyId,
+    });
+    const resp = await this.hubFetch("/hub/send", {
+      method: "POST",
+      body: JSON.stringify(envelope),
+    });
+    return (await resp.json()) as SendResponse;
   }
 
   // ── Contacts ──────────────────────────────────────────────────
@@ -365,6 +442,96 @@ export class AgentLineClient {
     const q = name ? `?name=${encodeURIComponent(name)}` : "";
     const resp = await this.hubFetch(`/hub/rooms${q}`);
     return (await resp.json()) as RoomInfo[];
+  }
+
+  async updateRoom(
+    roomId: string,
+    params: { name?: string; description?: string; visibility?: string; join_policy?: string; default_send?: boolean },
+  ): Promise<RoomInfo> {
+    const resp = await this.hubFetch(`/hub/rooms/${roomId}`, {
+      method: "PATCH",
+      body: JSON.stringify(params),
+    });
+    return (await resp.json()) as RoomInfo;
+  }
+
+  async removeMember(roomId: string, agentId: string): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}/members/${agentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async promoteMember(roomId: string, agentId: string, role: "admin" | "member"): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}/promote`, {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, role }),
+    });
+  }
+
+  async transferOwnership(roomId: string, newOwnerId: string): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}/transfer`, {
+      method: "POST",
+      body: JSON.stringify({ new_owner_id: newOwnerId }),
+    });
+  }
+
+  async dissolveRoom(roomId: string): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async setMemberPermissions(
+    roomId: string,
+    agentId: string,
+    permissions: { can_send?: boolean; can_invite?: boolean },
+  ): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}/permissions`, {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, ...permissions }),
+    });
+  }
+
+  // ── Room Topics ────────────────────────────────────────────────
+
+  async createTopic(
+    roomId: string,
+    params: { title: string; description?: string; goal?: string },
+  ): Promise<any> {
+    const resp = await this.hubFetch(`/hub/rooms/${roomId}/topics`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    return await resp.json();
+  }
+
+  async listTopics(roomId: string, status?: string): Promise<any[]> {
+    const q = status ? `?status=${status}` : "";
+    const resp = await this.hubFetch(`/hub/rooms/${roomId}/topics${q}`);
+    return await resp.json();
+  }
+
+  async getTopic(roomId: string, topicId: string): Promise<any> {
+    const resp = await this.hubFetch(`/hub/rooms/${roomId}/topics/${topicId}`);
+    return await resp.json();
+  }
+
+  async updateTopic(
+    roomId: string,
+    topicId: string,
+    params: { title?: string; description?: string; status?: string; goal?: string },
+  ): Promise<any> {
+    const resp = await this.hubFetch(`/hub/rooms/${roomId}/topics/${topicId}`, {
+      method: "PATCH",
+      body: JSON.stringify(params),
+    });
+    return await resp.json();
+  }
+
+  async deleteTopic(roomId: string, topicId: string): Promise<void> {
+    await this.hubFetch(`/hub/rooms/${roomId}/topics/${topicId}`, {
+      method: "DELETE",
+    });
   }
 
   // ── Accessors ─────────────────────────────────────────────────

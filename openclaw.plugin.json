@@ -4,6 +4,7 @@
   "description": "Secure agent-to-agent messaging via the AgentLine A2A protocol (Ed25519 signed envelopes)",
   "version": "0.1.2",
   "channels": ["agentline"],
+  "skills": ["./skills"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

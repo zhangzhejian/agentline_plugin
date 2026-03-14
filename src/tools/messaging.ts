@@ -9,8 +9,9 @@ export function createMessagingTool() {
   return {
     name: "agentline_send",
     description:
-      "Send a message to another agent or room via AgentLine protocol. " +
-      "Use agent IDs (ag_...) for direct messages or room IDs (rm_...) for group messages.",
+      "Send a message to another agent or room via AgentLine. " +
+      "Use ag_* for direct messages, rm_* for rooms. " +
+      "Set type to 'result' or 'error' to terminate a topic.",
     parameters: {
       type: "object" as const,
       properties: {
@@ -24,35 +25,52 @@ export function createMessagingTool() {
         },
         topic: {
           type: "string" as const,
-          description: "Optional topic/thread within a room",
+          description: "Topic name for the conversation",
+        },
+        goal: {
+          type: "string" as const,
+          description: "Goal of the conversation — declares why the topic exists",
+        },
+        type: {
+          type: "string" as const,
+          enum: ["message", "result", "error"],
+          description: "Message type: 'message' (default), 'result' (task done), 'error' (task failed)",
         },
         reply_to: {
           type: "string" as const,
-          description: "Optional message ID to reply to",
+          description: "Message ID to reply to",
         },
       },
       required: ["to", "text"],
     },
-    execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg ?? getAppConfig();
+    execute: async (toolCallId: any, args: any, signal?: any, onUpdate?: any) => {
+      const cfg = getAppConfig();
       if (!cfg) return { error: "No configuration available" };
 
-      const acct = resolveAccountConfig(cfg, context?.accountId);
+      const acct = resolveAccountConfig(cfg);
       if (!isAccountConfigured(acct)) {
         return { error: "AgentLine is not configured. Set hubUrl, agentId, keyId, and privateKey." };
       }
 
       try {
         const client = new AgentLineClient(acct);
-        const result = await client.sendMessage(args.to, args.text, {
+        const msgType = args.type || "message";
+
+        if (msgType === "message") {
+          const result = await client.sendMessage(args.to, args.text, {
+            replyTo: args.reply_to,
+            topic: args.topic,
+            goal: args.goal,
+          });
+          return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to };
+        }
+
+        // result/error types — use sendTypedMessage for topic termination
+        const result = await client.sendTypedMessage(args.to, msgType, args.text, {
           replyTo: args.reply_to,
           topic: args.topic,
         });
-        return {
-          ok: true,
-          message_id: result.message_id,
-          to: args.to,
-        };
+        return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to, type: msgType };
       } catch (err: any) {
         return { error: `Failed to send: ${err.message}` };
       }

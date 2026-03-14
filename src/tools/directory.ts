@@ -1,5 +1,5 @@
 /**
- * agentline_directory — Agent tool for agent discovery and resolution.
+ * agentline_directory — Read-only queries: resolve agents, discover rooms, message history.
  */
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
@@ -8,15 +8,14 @@ import { getConfig as getAppConfig } from "../runtime.js";
 export function createDirectoryTool() {
   return {
     name: "agentline_directory",
-    description:
-      "Look up agents on the AgentLine network: resolve an agent ID to get their info, or discover rooms.",
+    description: "Look up agents, discover public rooms, and query message history on AgentLine.",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string" as const,
           enum: ["resolve", "discover_rooms", "history"],
-          description: "Directory action to perform",
+          description: "Query action to perform",
         },
         agent_id: {
           type: "string" as const,
@@ -24,7 +23,7 @@ export function createDirectoryTool() {
         },
         room_name: {
           type: "string" as const,
-          description: "Room name to search for — for discover_rooms",
+          description: "Room name to search — for discover_rooms",
         },
         peer: {
           type: "string" as const,
@@ -34,6 +33,10 @@ export function createDirectoryTool() {
           type: "string" as const,
           description: "Room ID — for history",
         },
+        topic: {
+          type: "string" as const,
+          description: "Topic name — for history",
+        },
         limit: {
           type: "number" as const,
           description: "Max results to return",
@@ -41,11 +44,11 @@ export function createDirectoryTool() {
       },
       required: ["action"],
     },
-    execute: async (args: any, context: any) => {
-      const cfg = context?.config ?? context?.cfg ?? getAppConfig();
+    execute: async (toolCallId: any, args: any, signal?: any, onUpdate?: any) => {
+      const cfg = getAppConfig();
       if (!cfg) return { error: "No configuration available" };
 
-      const acct = resolveAccountConfig(cfg, context?.accountId);
+      const acct = resolveAccountConfig(cfg);
       if (!isAccountConfigured(acct)) {
         return { error: "AgentLine is not configured." };
       }
@@ -65,6 +68,7 @@ export function createDirectoryTool() {
             return await client.getHistory({
               peer: args.peer,
               roomId: args.room_id,
+              topic: args.topic,
               limit: args.limit || 20,
             });
 
