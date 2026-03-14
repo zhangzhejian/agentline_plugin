@@ -57,6 +57,7 @@ export interface InboundParams {
   roomId?: string;
   topic?: string;
   topicId?: string;
+  mentioned?: boolean;
 }
 
 /**
@@ -118,6 +119,7 @@ export async function handleInboxMessage(
     roomId: msg.room_id,
     topic: msg.topic,
     topicId: msg.topic_id,
+    mentioned: msg.mentioned,
   });
 }
 
@@ -181,7 +183,9 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
     Surface: "agentline" as const,
     MessageSid: messageId || `agentline-${Date.now()}`,
     Timestamp: Date.now(),
-    WasMentioned: true,
+    WasMentioned: params.chatType === "direct"
+      ? true
+      : (params.mentioned ?? true),
     CommandAuthorized: true,
     OriginatingChannel: "agentline" as const,
     OriginatingTo: to,

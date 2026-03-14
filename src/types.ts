@@ -30,6 +30,7 @@ export type AgentLineMessageEnvelope = {
   payload: Record<string, unknown>;
   payload_hash: string;
   sig: AgentLineSignature;
+  mentions?: string[] | null;
 };
 
 // Account config in openclaw.json channels.agentline
@@ -61,6 +62,7 @@ export type InboxMessage = {
   topic?: string;
   topic_id?: string;
   goal?: string;
+  mentioned?: boolean;
 };
 
 export type InboxPollResponse = {
