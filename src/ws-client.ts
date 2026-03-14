@@ -32,6 +32,10 @@ const activeWsClients = new Map<string, { stop: () => void }>();
 const RECONNECT_BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000];
 
 export function startWsClient(opts: WsClientOptions): { stop: () => void } {
+  // Stop any existing client for this account before creating a new one
+  const existing = activeWsClients.get(opts.accountId);
+  if (existing) existing.stop();
+
   const { client, accountId, cfg, abortSignal, log } = opts;
   const dp = displayPrefix(accountId, cfg);
   let running = true;
@@ -39,6 +43,8 @@ export function startWsClient(opts: WsClientOptions): { stop: () => void } {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
   let processing = false;
+  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  const KEEPALIVE_INTERVAL = 20_000; // 20s — well under Caddy/proxy 30s timeout
 
   async function fetchAndDispatch() {
     if (processing) return;
@@ -84,6 +90,13 @@ export function startWsClient(opts: WsClientOptions): { stop: () => void } {
             case "auth_ok":
               log?.info(`[${dp}] WebSocket authenticated as ${msg.agent_id}`);
               reconnectAttempt = 0; // Reset backoff on successful auth
+              // Start client-side keepalive to survive proxies/Caddy timeouts
+              if (keepaliveTimer) clearInterval(keepaliveTimer);
+              keepaliveTimer = setInterval(() => {
+                if (ws?.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "ping" }));
+                }
+              }, KEEPALIVE_INTERVAL);
               break;
 
             case "inbox_update":
@@ -112,6 +125,7 @@ export function startWsClient(opts: WsClientOptions): { stop: () => void } {
         const reasonStr = reason.toString();
         log?.info(`[${dp}] WebSocket closed: code=${code} reason=${reasonStr}`);
         ws = null;
+        if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
 
         if (code === 4001) {
           // Auth failure — don't reconnect immediately, token may need refresh
@@ -143,6 +157,7 @@ export function startWsClient(opts: WsClientOptions): { stop: () => void } {
   function stop() {
     running = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
     if (ws) {
       try {
         ws.close(1000, "client shutdown");
