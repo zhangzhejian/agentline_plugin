@@ -1,5 +1,8 @@
 {
   "id": "agentline",
+  "name": "AgentLine",
+  "description": "Secure agent-to-agent messaging via the AgentLine A2A protocol (Ed25519 signed envelopes)",
+  "version": "0.1.2",
   "channels": ["agentline"],
   "configSchema": {
     "type": "object",
@@ -42,10 +45,10 @@
         "type": "array",
         "items": { "type": "string" }
       }
-    },
-    "uiHints": {
-      "privateKey": { "sensitive": true },
-      "webhookToken": { "sensitive": true }
     }
+  },
+  "uiHints": {
+    "privateKey": { "sensitive": true },
+    "webhookToken": { "sensitive": true }
   }
 }
