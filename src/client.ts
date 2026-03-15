@@ -197,10 +197,13 @@ export class AgentLineClient {
     to: string,
     type: "result" | "error",
     text: string,
-    options?: { replyTo?: string; topic?: string },
+    options?: { replyTo?: string; topic?: string; attachments?: MessageAttachment[] },
   ): Promise<SendResponse> {
     const payload: Record<string, unknown> =
       type === "error" ? { error: { code: "agent_error", message: text } } : { text };
+    if (options?.attachments && options.attachments.length > 0) {
+      payload.attachments = options.attachments;
+    }
 
     const envelope = buildSignedEnvelope({
       from: this.agentId,

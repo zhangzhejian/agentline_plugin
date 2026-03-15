@@ -8,6 +8,7 @@
   "files": [
     "index.ts",
     "src/",
+    "skills/",
     "openclaw.plugin.json"
   ],
   "keywords": [

@@ -6,6 +6,15 @@ import { AgentLineClient } from "../client.js";
 import { getConfig as getAppConfig } from "../runtime.js";
 import type { MessageAttachment } from "../types.js";
 
+/** Extract clean filename from a URL, stripping query string and hash. */
+function extractFilename(url: string): string {
+  try {
+    return new URL(url).pathname.split("/").pop() || "attachment";
+  } catch {
+    return url.split("/").pop()?.split("?")[0]?.split("#")[0] || "attachment";
+  }
+}
+
 export function createMessagingTool() {
   return {
     name: "agentline_send",
@@ -72,7 +81,7 @@ export function createMessagingTool() {
         const attachments: MessageAttachment[] | undefined =
           args.file_urls && args.file_urls.length > 0
             ? args.file_urls.map((url: string) => ({
-                filename: url.split("/").pop() || "attachment",
+                filename: extractFilename(url),
                 url,
               }))
             : undefined;
@@ -92,6 +101,7 @@ export function createMessagingTool() {
         const result = await client.sendTypedMessage(args.to, msgType, args.text, {
           replyTo: args.reply_to,
           topic: args.topic,
+          attachments,
         });
         return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to, type: msgType };
       } catch (err: any) {
