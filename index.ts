@@ -3,7 +3,7 @@
  *
  * Registers:
  * - Channel plugin (agentline) with webhook + polling gateway
- * - Agent tools: agentline_send, agentline_rooms, agentline_topics, agentline_contacts, agentline_account, agentline_directory
+ * - Agent tools: agentline_send, agentline_upload, agentline_rooms, agentline_topics, agentline_contacts, agentline_account, agentline_directory
  * - Command: /agentline-healthcheck
  * - CLI: openclaw agentline-register
  * - HTTP route: /agentline_inbox/:accountId for inbound webhooks
@@ -13,7 +13,7 @@ import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { agentLinePlugin } from "./src/channel.js";
 import { setAgentLineRuntime, setConfigGetter } from "./src/runtime.js";
 import { createWebhookHandler } from "./src/webhook-handler.js";
-import { createMessagingTool } from "./src/tools/messaging.js";
+import { createMessagingTool, createUploadTool } from "./src/tools/messaging.js";
 import { createRoomsTool } from "./src/tools/rooms.js";
 import { createContactsTool } from "./src/tools/contacts.js";
 import { createDirectoryTool } from "./src/tools/directory.js";
@@ -43,6 +43,7 @@ const plugin = {
     api.registerTool(createContactsTool() as any);
     api.registerTool(createAccountTool() as any);
     api.registerTool(createDirectoryTool() as any);
+    api.registerTool(createUploadTool() as any);
 
     // Register commands
     api.registerCommand(createHealthcheckCommand() as any);

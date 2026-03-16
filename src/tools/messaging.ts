@@ -1,6 +1,9 @@
 /**
  * agentline_send — Agent tool for sending messages via AgentLine.
  */
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { lookup } from "node:dns";
 import { resolveAccountConfig, isAccountConfigured } from "../config.js";
 import { AgentLineClient } from "../client.js";
 import { getConfig as getAppConfig } from "../runtime.js";
@@ -15,6 +18,58 @@ function extractFilename(url: string): string {
   }
 }
 
+/** Guess MIME type from file extension. */
+function guessMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    txt: "text/plain",
+    html: "text/html",
+    css: "text/css",
+    js: "text/javascript",
+    json: "application/json",
+    xml: "application/xml",
+    pdf: "application/pdf",
+    zip: "application/zip",
+    gz: "application/gzip",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    csv: "text/csv",
+    md: "text/markdown",
+  };
+  return map[ext || ""] || "application/octet-stream";
+}
+
+/**
+ * Upload local files to Hub and return attachments.
+ */
+async function uploadLocalFiles(
+  client: AgentLineClient,
+  filePaths: string[],
+): Promise<MessageAttachment[]> {
+  const results: MessageAttachment[] = [];
+  for (const filePath of filePaths) {
+    const data = await readFile(filePath);
+    const filename = basename(filePath);
+    const contentType = guessMimeType(filename);
+    const uploaded = await client.uploadFile(data, filename, contentType);
+    results.push({
+      filename: uploaded.original_filename,
+      url: uploaded.url,
+      content_type: uploaded.content_type,
+      size_bytes: uploaded.size_bytes,
+    });
+  }
+  return results;
+}
+
 export function createMessagingTool() {
   return {
     name: "agentline_send",
@@ -22,7 +77,7 @@ export function createMessagingTool() {
       "Send a message to another agent or room via AgentLine. " +
       "Use ag_* for direct messages, rm_* for rooms. " +
       "Set type to 'result' or 'error' to terminate a topic. " +
-      "Attach files via file_urls (array of URLs).",
+      "Attach files via file_paths (local files, auto-uploaded) or file_urls (existing URLs).",
     parameters: {
       type: "object" as const,
       properties: {
@@ -56,10 +111,15 @@ export function createMessagingTool() {
           items: { type: "string" as const },
           description: 'Agent IDs to mention (e.g. ["ag_xxx"]). Use ["@all"] to mention everyone.',
         },
+        file_paths: {
+          type: "array" as const,
+          items: { type: "string" as const },
+          description: "Local file paths to upload and attach to the message",
+        },
         file_urls: {
           type: "array" as const,
           items: { type: "string" as const },
-          description: "URLs of files to attach to the message",
+          description: "URLs of already-hosted files to attach to the message",
         },
       },
       required: ["to", "text"],
@@ -77,14 +137,23 @@ export function createMessagingTool() {
         const client = new AgentLineClient(acct);
         const msgType = args.type || "message";
 
-        // Build attachments from file_urls
-        const attachments: MessageAttachment[] | undefined =
-          args.file_urls && args.file_urls.length > 0
-            ? args.file_urls.map((url: string) => ({
-                filename: extractFilename(url),
-                url,
-              }))
-            : undefined;
+        // Collect attachments from both file_paths (upload first) and file_urls
+        const attachments: MessageAttachment[] = [];
+
+        // Upload local files
+        if (args.file_paths && args.file_paths.length > 0) {
+          const uploaded = await uploadLocalFiles(client, args.file_paths);
+          attachments.push(...uploaded);
+        }
+
+        // Add pre-existing URL attachments
+        if (args.file_urls && args.file_urls.length > 0) {
+          for (const url of args.file_urls) {
+            attachments.push({ filename: extractFilename(url), url });
+          }
+        }
+
+        const finalAttachments = attachments.length > 0 ? attachments : undefined;
 
         if (msgType === "message") {
           const result = await client.sendMessage(args.to, args.text, {
@@ -92,20 +161,65 @@ export function createMessagingTool() {
             topic: args.topic,
             goal: args.goal,
             mentions: args.mentions,
-            attachments,
+            attachments: finalAttachments,
           });
-          return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to };
+          return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to, attachments: finalAttachments };
         }
 
         // result/error types — use sendTypedMessage for topic termination
         const result = await client.sendTypedMessage(args.to, msgType, args.text, {
           replyTo: args.reply_to,
           topic: args.topic,
-          attachments,
+          attachments: finalAttachments,
         });
-        return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to, type: msgType };
+        return { ok: true, hub_msg_id: result.hub_msg_id, to: args.to, type: msgType, attachments: finalAttachments };
       } catch (err: any) {
         return { error: `Failed to send: ${err.message}` };
+      }
+    },
+  };
+}
+
+/**
+ * Standalone file upload tool — uploads files to Hub without sending a message.
+ */
+export function createUploadTool() {
+  return {
+    name: "agentline_upload",
+    description:
+      "Upload one or more local files to AgentLine Hub. " +
+      "Returns file URLs that can be used later in agentline_send's file_urls parameter. " +
+      "Files expire after the Hub's configured TTL (default 1 hour).",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        file_paths: {
+          type: "array" as const,
+          items: { type: "string" as const },
+          description: "Local file paths to upload",
+        },
+      },
+      required: ["file_paths"],
+    },
+    execute: async (toolCallId: any, args: any, signal?: any, onUpdate?: any) => {
+      const cfg = getAppConfig();
+      if (!cfg) return { error: "No configuration available" };
+
+      const acct = resolveAccountConfig(cfg);
+      if (!isAccountConfigured(acct)) {
+        return { error: "AgentLine is not configured. Set hubUrl, agentId, keyId, and privateKey." };
+      }
+
+      if (!args.file_paths || args.file_paths.length === 0) {
+        return { error: "file_paths is required and must not be empty" };
+      }
+
+      try {
+        const client = new AgentLineClient(acct);
+        const uploaded = await uploadLocalFiles(client, args.file_paths);
+        return { ok: true, files: uploaded };
+      } catch (err: any) {
+        return { error: `Upload failed: ${err.message}` };
       }
     },
   };
