@@ -28,6 +28,7 @@ export function resolveAccounts(
       pollIntervalMs: channelCfg.pollIntervalMs,
       webhookToken: channelCfg.webhookToken,
       allowFrom: channelCfg.allowFrom,
+      notifySession: channelCfg.notifySession,
     },
   };
 }

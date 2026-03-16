@@ -60,6 +60,8 @@ export type InboxMessage = {
   room_name?: string;
   room_member_count?: number;
   room_member_names?: string[];
+  my_role?: string;
+  my_can_send?: boolean;
   topic?: string;
   topic_id?: string;
   goal?: string;
