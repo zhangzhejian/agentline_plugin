@@ -3,10 +3,8 @@
  * Converts AgentLine messages to OpenClaw inbound format.
  */
 import { getAgentLineRuntime } from "./runtime.js";
-import { resolveAccountConfig, displayPrefix } from "./config.js";
-import { AgentLineClient } from "./client.js";
 import { buildSessionKey } from "./session-key.js";
-import type { AgentLineAccountConfig, InboxMessage, MessageType } from "./types.js";
+import type { InboxMessage, MessageType } from "./types.js";
 
 // Envelope types that count as notifications rather than normal messages
 const NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
@@ -58,19 +56,6 @@ export interface InboundParams {
   topic?: string;
   topicId?: string;
   mentioned?: boolean;
-}
-
-/**
- * Route an outbound reply back to AgentLine Hub.
- */
-async function sendReply(
-  acct: AgentLineAccountConfig,
-  target: string,
-  text: string,
-  options?: { topic?: string },
-): Promise<void> {
-  const client = new AgentLineClient(acct);
-  await client.sendMessage(target, text, { topic: options?.topic });
 }
 
 /**
@@ -144,7 +129,6 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
 
   const from = `agentline:${senderId}`;
   const to = `agentline:${accountId}`;
-  const dp = displayPrefix(accountId, cfg);
   const sessionKey = buildSessionKey(roomId, topic, senderId);
 
   const route = core.channel.routing.resolveAgentRoute({
@@ -192,25 +176,13 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
     ConversationLabel: chatType === "group" ? (groupSubject || senderName) : senderName,
   });
 
-  const acct = resolveAccountConfig(cfg, accountId);
-
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
     cfg,
     dispatcherOptions: {
-      deliver: async (payload: any) => {
-        const text =
-          typeof payload === "string"
-            ? payload
-            : payload?.text ?? payload?.body ?? String(payload);
-        if (!text?.trim()) return;
-
-        try {
-          await sendReply(acct, replyTarget, text, { topic });
-        } catch (err: any) {
-          console.error(`[agentline] reply failed:`, err);
-        }
-      },
+      // A2A replies are sent explicitly via agentline_send tool.
+      // Suppress automatic delivery to avoid leaking agent narration.
+      deliver: async () => {},
       onError: (err: any, info: any) => {
         console.error(`[agentline] ${info?.kind ?? "unknown"} reply error:`, err);
       },
