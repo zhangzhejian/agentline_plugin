@@ -444,13 +444,20 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
 
       ctx.setStatus({ accountId: ctx.accountId, running: true, lastStartAt: new Date() });
 
-      return {
-        stop: async () => {
-          stopWsClient(account.accountId);
-          stopPoller(account.accountId);
-          ctx.setStatus({ accountId: ctx.accountId, running: false, lastStopAt: new Date() });
-        },
-      };
+      // Keep the promise alive until the gateway signals shutdown via abortSignal.
+      // If we return immediately, the gateway considers the channel "stopped" and
+      // enters an auto-restart loop.
+      await new Promise<void>((resolve) => {
+        if (ctx.abortSignal?.aborted) {
+          resolve();
+          return;
+        }
+        ctx.abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+
+      stopWsClient(account.accountId);
+      stopPoller(account.accountId);
+      ctx.setStatus({ accountId: ctx.accountId, running: false, lastStopAt: new Date() });
     },
   },
 };
