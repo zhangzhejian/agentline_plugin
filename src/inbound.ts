@@ -88,11 +88,11 @@ export async function handleInboxMessage(
     chatType,
     roomName: isGroupRoom ? (msg.room_name || msg.room_id) : undefined,
   });
-  const dmSilentHint =
-    chatType === "direct"
-      ? '\n\n[If the conversation has naturally concluded or no response is needed, reply with exactly "NO_REPLY" and nothing else.]'
-      : "";
-  const content = `${header}\n${rawContent}${dmSilentHint}`;
+  const silentHint =
+    chatType === "group"
+      ? '\n\n[In group chats, do NOT reply unless you are explicitly mentioned or addressed. If no response is needed, reply with exactly "NO_REPLY" and nothing else.]'
+      : '\n\n[If the conversation has naturally concluded or no response is needed, reply with exactly "NO_REPLY" and nothing else.]';
+  const content = `${header}\n${rawContent}${silentHint}`;
 
   await dispatchInbound({
     cfg,
