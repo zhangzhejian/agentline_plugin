@@ -51,6 +51,7 @@ export interface InboundParams {
   senderId: string;
   content: string;
   messageId?: string;
+  messageType?: MessageType;
   chatType: "direct" | "group";
   groupSubject?: string;
   replyTarget: string;
@@ -100,6 +101,7 @@ export async function handleInboxMessage(
     senderId,
     content: content as string,
     messageId: envelope.msg_id,
+    messageType: envelope.type,
     chatType,
     groupSubject: isGroupRoom ? (msg.room_name || msg.room_id) : undefined,
     replyTarget: isGroupRoom ? msg.room_id! : (envelope.from || ""),
@@ -192,25 +194,27 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
     replyOptions: {},
   });
 
-  // Notify owner session if configured — deliver directly to the session's
-  // last-known channel (e.g. Telegram) without triggering an agent turn.
-  const acct = resolveAccountConfig(cfg, accountId);
-  const notifySession = acct.notifySession;
-  if (notifySession) {
-    const childSessionKey = route.sessionKey || sessionKey;
-    // Skip if the message is already in the notify session
-    if (childSessionKey !== notifySession) {
-      const topicLabel = topic ? ` (topic: ${topic})` : "";
-      const preview = (params.content || "").slice(0, 200);
-      const notification =
-        `[AgentLine] New message from ${senderName}${topicLabel}\n` +
-        `Session: ${childSessionKey}\n` +
-        `Preview: ${preview}`;
+  // Auto-notify owner for notification-type messages (contact requests, etc.)
+  // Normal messages are NOT auto-notified; the agent can use the
+  // agentline_notify tool to notify the owner when it deems appropriate.
+  const messageType = params.messageType;
+  if (messageType && NOTIFICATION_TYPES.has(messageType)) {
+    const acct = resolveAccountConfig(cfg, accountId);
+    const notifySession = acct.notifySession;
+    if (notifySession) {
+      const childSessionKey = route.sessionKey || sessionKey;
+      if (childSessionKey !== notifySession) {
+        const topicLabel = topic ? ` (topic: ${topic})` : "";
+        const notification =
+          `[AgentLine ${messageType}] from ${senderName}${topicLabel}\n` +
+          `Session: ${childSessionKey}\n` +
+          `Preview: ${(params.content || "").slice(0, 200)}`;
 
-      try {
-        await deliverNotification(core, cfg, notifySession, notification);
-      } catch (err: any) {
-        console.error(`[agentline] notify owner session failed:`, err?.message ?? err);
+        try {
+          await deliverNotification(core, cfg, notifySession, notification);
+        } catch (err: any) {
+          console.error(`[agentline] auto-notify failed:`, err?.message ?? err);
+        }
       }
     }
   }
@@ -271,7 +275,7 @@ function resolveChannelSendFn(
  * the target session (looked up via deliveryContext in the session store).
  * Does not trigger an agent turn — just sends the text.
  */
-async function deliverNotification(
+export async function deliverNotification(
   core: ReturnType<typeof getAgentLineRuntime>,
   cfg: any,
   sessionKey: string,

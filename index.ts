@@ -19,6 +19,7 @@ import { createContactsTool } from "./src/tools/contacts.js";
 import { createDirectoryTool } from "./src/tools/directory.js";
 import { createTopicsTool } from "./src/tools/topics.js";
 import { createAccountTool } from "./src/tools/account.js";
+import { createNotifyTool } from "./src/tools/notify.js";
 import { createHealthcheckCommand } from "./src/commands/healthcheck.js";
 import { createTokenCommand } from "./src/commands/token.js";
 import { createRegisterCli } from "./src/commands/register.js";
@@ -45,6 +46,7 @@ const plugin = {
     api.registerTool(createAccountTool() as any);
     api.registerTool(createDirectoryTool() as any);
     api.registerTool(createUploadTool() as any);
+    api.registerTool(createNotifyTool() as any);
 
     // Register commands
     api.registerCommand(createHealthcheckCommand() as any);
