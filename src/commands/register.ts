@@ -2,12 +2,10 @@
  * `openclaw agentline-register` — CLI command for agent registration.
  *
  * Generates Ed25519 keypair, registers with Hub, writes credentials
- * directly to openclaw.json. No external dependencies (curl/jq/shell).
+ * to openclaw.json via OpenClaw's writeConfigFile API.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { generateKeypair, signChallenge } from "../crypto.js";
+import { getAgentLineRuntime } from "../runtime.js";
 
 const DEFAULT_HUB = "https://api.agentline.chat";
 
@@ -16,44 +14,15 @@ interface RegisterResult {
   keyId: string;
   displayName: string;
   hub: string;
-  configPath: string;
-}
-
-/**
- * Find openclaw.json path. Priority:
- * 1. OPENCLAW_CONFIG env var
- * 2. Current working directory
- * 3. ~/.openclaw/
- */
-function findConfigPath(): string | null {
-  const envPath = process.env.OPENCLAW_CONFIG;
-  if (envPath && existsSync(envPath)) return envPath;
-
-  const candidates = [
-    join(process.cwd(), "openclaw.json"),
-    join(homedir(), ".openclaw", "openclaw.json"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
-function readConfig(path: string): Record<string, any> {
-  const raw = readFileSync(path, "utf-8");
-  return JSON.parse(raw);
-}
-
-function writeConfig(path: string, config: Record<string, any>): void {
-  writeFileSync(path, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 
 async function registerAgent(opts: {
   name: string;
   bio: string;
   hub: string;
+  config: Record<string, any>;
 }): Promise<RegisterResult> {
-  const { name, bio, hub } = opts;
+  const { name, bio, hub, config } = opts;
 
   // 1. Generate keypair
   const keys = generateKeypair();
@@ -102,43 +71,41 @@ async function registerAgent(opts: {
     throw new Error(`Verification failed (${verifyResp.status}): ${body}`);
   }
 
-  // 5. Write to openclaw.json
-  const configPath = findConfigPath();
-  if (!configPath) {
-    throw new Error(
-      "openclaw.json not found. Create it first or run from your OpenClaw workspace directory.",
-    );
-  }
+  // 5. Write credentials via OpenClaw's config API
+  const runtime = getAgentLineRuntime();
 
-  const config = readConfig(configPath);
-
-  // Merge channel config
-  if (!config.channels) config.channels = {};
-  config.channels.agentline = {
-    ...config.channels.agentline,
-    enabled: true,
-    hubUrl: hub,
-    agentId: regData.agent_id,
-    keyId: regData.key_id,
-    privateKey: keys.privateKey,
-    publicKey: keys.publicKey,
-    deliveryMode: config.channels.agentline?.deliveryMode || "websocket",
+  const nextConfig = {
+    ...config,
+    channels: {
+      ...(config.channels as Record<string, any>),
+      agentline: {
+        ...(config.channels as Record<string, any>)?.agentline,
+        enabled: true,
+        hubUrl: hub,
+        agentId: regData.agent_id,
+        keyId: regData.key_id,
+        privateKey: keys.privateKey,
+        publicKey: keys.publicKey,
+        deliveryMode:
+          (config.channels as Record<string, any>)?.agentline?.deliveryMode ||
+          "websocket",
+      },
+    },
+    session: {
+      ...(config.session as Record<string, any>),
+      dmScope:
+        (config.session as Record<string, any>)?.dmScope ||
+        "per-channel-peer",
+    },
   };
 
-  // Ensure session.dmScope
-  if (!config.session) config.session = {};
-  if (!config.session.dmScope) {
-    config.session.dmScope = "per-channel-peer";
-  }
-
-  writeConfig(configPath, config);
+  await runtime.config.writeConfigFile(nextConfig);
 
   return {
     agentId: regData.agent_id,
     keyId: regData.key_id,
     displayName: name,
     hub,
-    configPath,
   };
 }
 
@@ -153,15 +120,17 @@ export function createRegisterCli() {
         .option("--hub <url>", "Hub URL", DEFAULT_HUB)
         .action(async (options: { name: string; bio: string; hub: string }) => {
           try {
-            const result = await registerAgent(options);
+            const result = await registerAgent({
+              ...options,
+              config: ctx.config,
+            });
             ctx.logger.info(`Agent registered successfully!`);
             ctx.logger.info(`  Agent ID:     ${result.agentId}`);
             ctx.logger.info(`  Key ID:       ${result.keyId}`);
             ctx.logger.info(`  Display name: ${result.displayName}`);
             ctx.logger.info(`  Hub:          ${result.hub}`);
-            ctx.logger.info(`  Config:       ${result.configPath}`);
             ctx.logger.info(``);
-            ctx.logger.info(`Restart OpenClaw to activate: openclaw restart`);
+            ctx.logger.info(`Restart OpenClaw to activate: openclaw gateway restart`);
           } catch (err: any) {
             ctx.logger.error(`Registration failed: ${err.message}`);
             throw err;
