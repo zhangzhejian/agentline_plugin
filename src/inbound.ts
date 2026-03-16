@@ -2,6 +2,7 @@
  * Inbound message dispatch — shared by webhook and polling paths.
  * Converts AgentLine messages to OpenClaw inbound format.
  */
+import { readFile } from "node:fs/promises";
 import { getAgentLineRuntime } from "./runtime.js";
 import { resolveAccountConfig } from "./config.js";
 import { buildSessionKey } from "./session-key.js";
@@ -191,7 +192,8 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
     replyOptions: {},
   });
 
-  // Notify owner session if configured
+  // Notify owner session if configured — deliver directly to the session's
+  // last-known channel (e.g. Telegram) without triggering an agent turn.
   const acct = resolveAccountConfig(cfg, accountId);
   const notifySession = acct.notifySession;
   if (notifySession) {
@@ -206,14 +208,94 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
         `Preview: ${preview}`;
 
       try {
-        await core.subagent.run({
-          sessionKey: notifySession,
-          message: notification,
-          deliver: true,
-        });
+        await deliverNotification(core, cfg, notifySession, notification);
       } catch (err: any) {
         console.error(`[agentline] notify owner session failed:`, err?.message ?? err);
       }
     }
   }
+}
+
+// ── Notification delivery helpers ───────────────────────────────────
+
+type DeliveryContext = {
+  channel: string;
+  to: string;
+  accountId?: string;
+  threadId?: string;
+};
+
+/**
+ * Read deliveryContext for a session key from the session store on disk.
+ * Returns undefined when the session has no recorded delivery route.
+ */
+async function resolveSessionDeliveryContext(
+  core: ReturnType<typeof getAgentLineRuntime>,
+  cfg: any,
+  sessionKey: string,
+): Promise<DeliveryContext | undefined> {
+  try {
+    const storePath = core.channel.session.resolveStorePath(cfg.session?.store);
+    const raw = await readFile(storePath, "utf-8");
+    const store: Record<string, { deliveryContext?: DeliveryContext }> = JSON.parse(raw);
+    const entry = store[sessionKey];
+    if (entry?.deliveryContext?.channel && entry.deliveryContext.to) {
+      return entry.deliveryContext;
+    }
+  } catch {
+    // best-effort: store may not exist yet
+  }
+  return undefined;
+}
+
+/** Channel name → runtime send function dispatcher. */
+type ChannelSendFn = (to: string, text: string, opts: Record<string, unknown>) => Promise<unknown>;
+
+function resolveChannelSendFn(
+  core: ReturnType<typeof getAgentLineRuntime>,
+  channel: string,
+): ChannelSendFn | undefined {
+  const map: Record<string, ChannelSendFn | undefined> = {
+    telegram: core.channel.telegram?.sendMessageTelegram as ChannelSendFn | undefined,
+    discord: core.channel.discord?.sendMessageDiscord as ChannelSendFn | undefined,
+    slack: core.channel.slack?.sendMessageSlack as ChannelSendFn | undefined,
+    whatsapp: core.channel.whatsapp?.sendMessageWhatsApp as ChannelSendFn | undefined,
+    signal: core.channel.signal?.sendMessageSignal as ChannelSendFn | undefined,
+    imessage: core.channel.imessage?.sendMessageIMessage as ChannelSendFn | undefined,
+  };
+  return map[channel];
+}
+
+/**
+ * Deliver a notification message directly to the channel associated with
+ * the target session (looked up via deliveryContext in the session store).
+ * Does not trigger an agent turn — just sends the text.
+ */
+async function deliverNotification(
+  core: ReturnType<typeof getAgentLineRuntime>,
+  cfg: any,
+  sessionKey: string,
+  text: string,
+): Promise<void> {
+  const delivery = await resolveSessionDeliveryContext(core, cfg, sessionKey);
+  if (!delivery) {
+    console.warn(
+      `[agentline] notifySession ${sessionKey} has no deliveryContext — skipping notification`,
+    );
+    return;
+  }
+
+  const sendFn = resolveChannelSendFn(core, delivery.channel);
+  if (!sendFn) {
+    console.warn(
+      `[agentline] unsupported notify channel "${delivery.channel}" — skipping notification`,
+    );
+    return;
+  }
+
+  await sendFn(delivery.to, text, {
+    cfg,
+    accountId: delivery.accountId,
+    threadId: delivery.threadId,
+  });
 }
