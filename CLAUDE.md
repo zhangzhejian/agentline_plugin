@@ -91,6 +91,7 @@ echo "//registry.npmjs.org/:_authToken=<your-token>" >> ~/.npmrc
 
 ## Key Conventions
 
+- **Version must be synced**: `package.json` and `openclaw.plugin.json` must have the same `version` value. When bumping version, update both files. Check this before every commit.
 - All imports use `.js` extensions (NodeNext module resolution)
 - Protocol version is `a2a/0.1` — hardcoded in envelope `v` field
 - Agent IDs start with `ag_`, room IDs with `rm_` (DM rooms: `rm_dm_`)
