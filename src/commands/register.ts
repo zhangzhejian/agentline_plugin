@@ -89,6 +89,9 @@ async function registerAgent(opts: {
         deliveryMode:
           (config.channels as Record<string, any>)?.agentline?.deliveryMode ||
           "websocket",
+        notifySession:
+          (config.channels as Record<string, any>)?.agentline?.notifySession ||
+          "agent:main:main",
       },
     },
     session: {

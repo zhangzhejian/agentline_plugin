@@ -45,6 +45,7 @@ export type AgentLineAccountConfig = {
   pollIntervalMs?: number;
   webhookToken?: string;
   allowFrom?: string[];
+  notifySession?: string;
   accounts?: Record<string, AgentLineAccountConfig>;
 };
 

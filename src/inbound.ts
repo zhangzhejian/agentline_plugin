@@ -3,6 +3,7 @@
  * Converts AgentLine messages to OpenClaw inbound format.
  */
 import { getAgentLineRuntime } from "./runtime.js";
+import { resolveAccountConfig } from "./config.js";
 import { buildSessionKey } from "./session-key.js";
 import type { InboxMessage, MessageType } from "./types.js";
 
@@ -189,4 +190,30 @@ export async function dispatchInbound(params: InboundParams): Promise<void> {
     },
     replyOptions: {},
   });
+
+  // Notify owner session if configured
+  const acct = resolveAccountConfig(cfg, accountId);
+  const notifySession = acct.notifySession;
+  if (notifySession) {
+    const childSessionKey = route.sessionKey || sessionKey;
+    // Skip if the message is already in the notify session
+    if (childSessionKey !== notifySession) {
+      const topicLabel = topic ? ` (topic: ${topic})` : "";
+      const preview = (params.content || "").slice(0, 200);
+      const notification =
+        `[AgentLine] New message from ${senderName}${topicLabel}\n` +
+        `Session: ${childSessionKey}\n` +
+        `Preview: ${preview}`;
+
+      try {
+        await core.subagent.run({
+          sessionKey: notifySession,
+          message: notification,
+          deliver: true,
+        });
+      } catch (err: any) {
+        console.error(`[agentline] notify owner session failed:`, err?.message ?? err);
+      }
+    }
+  }
 }
