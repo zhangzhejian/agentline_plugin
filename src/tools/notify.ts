@@ -5,7 +5,7 @@
  */
 import { getAgentLineRuntime } from "../runtime.js";
 import { getConfig as getAppConfig } from "../runtime.js";
-import { resolveAccountConfig } from "../config.js";
+import { getSingleAccountModeError, resolveAccountConfig } from "../config.js";
 import { deliverNotification } from "../inbound.js";
 
 export function createNotifyTool() {
@@ -29,6 +29,8 @@ export function createNotifyTool() {
     execute: async (toolCallId: any, args: any) => {
       const cfg = getAppConfig();
       if (!cfg) return { error: "No configuration available" };
+      const singleAccountError = getSingleAccountModeError(cfg);
+      if (singleAccountError) return { error: singleAccountError };
 
       const acct = resolveAccountConfig(cfg);
       const notifySession = acct.notifySession;

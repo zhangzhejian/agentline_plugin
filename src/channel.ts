@@ -1,26 +1,21 @@
 /**
  * AgentLine ChannelPlugin — defines meta, capabilities, config,
- * outbound (send via signed envelopes), gateway (start webhook/polling),
+ * outbound (send via signed envelopes), gateway (start websocket/polling),
  * security, messaging, and status adapters.
  */
 import type { ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
 import {
   buildBaseChannelStatusSummary,
-  buildChannelConfigSchema,
   createDefaultChannelRuntimeState,
   DEFAULT_ACCOUNT_ID,
-  deleteAccountFromConfigSection,
-  setAccountEnabledInConfigSection,
 } from "openclaw/plugin-sdk";
 import {
   resolveChannelConfig,
   resolveAccounts,
-  resolveAccountConfig,
   isAccountConfigured,
   displayPrefix,
 } from "./config.js";
 import { AgentLineClient } from "./client.js";
-import { buildSessionKey } from "./session-key.js";
 import { getAgentLineRuntime } from "./runtime.js";
 import { startPoller, stopPoller } from "./poller.js";
 import { startWsClient, stopWsClient } from "./ws-client.js";
@@ -40,7 +35,7 @@ export interface ResolvedAgentLineAccount {
   config: AgentLineAccountConfig;
   hubUrl?: string;
   agentId?: string;
-  deliveryMode?: "webhook" | "polling" | "websocket";
+  deliveryMode?: "polling" | "websocket";
 }
 
 type CoreConfig = any;
@@ -49,12 +44,16 @@ type CoreConfig = any;
 
 function resolveAgentLineAccount(params: {
   cfg: CoreConfig;
-  accountId?: string;
+  accountId?: string | null;
 }): ResolvedAgentLineAccount {
   const channelCfg = resolveChannelConfig(params.cfg);
   const accounts = resolveAccounts(channelCfg);
   const id = params.accountId || Object.keys(accounts)[0] || "default";
   const acct = accounts[id] || ({} as AgentLineAccountConfig);
+  const rawDeliveryMode = (acct as { deliveryMode?: string }).deliveryMode;
+  const deliveryMode = rawDeliveryMode === "polling" || rawDeliveryMode === "webhook"
+    ? "polling"
+    : "websocket";
 
   return {
     accountId: id,
@@ -64,7 +63,7 @@ function resolveAgentLineAccount(params: {
     config: acct,
     hubUrl: acct.hubUrl,
     agentId: acct.agentId,
-    deliveryMode: acct.deliveryMode || "websocket",
+    deliveryMode,
   };
 }
 
@@ -107,10 +106,9 @@ const agentLineConfigSchema = {
     publicKey: { type: "string" as const, description: "Ed25519 public key (base64)" },
     deliveryMode: {
       type: "string" as const,
-      enum: ["websocket", "webhook", "polling"],
+      enum: ["websocket", "polling"],
     },
     pollIntervalMs: { type: "number" as const },
-    webhookToken: { type: "string" as const },
     allowFrom: {
       type: "array" as const,
       items: { type: "string" as const },
@@ -130,9 +128,8 @@ const agentLineConfigSchema = {
           keyId: { type: "string" as const },
           privateKey: { type: "string" as const },
           publicKey: { type: "string" as const },
-          deliveryMode: { type: "string" as const, enum: ["websocket", "webhook", "polling"] },
+          deliveryMode: { type: "string" as const, enum: ["websocket", "polling"] },
           pollIntervalMs: { type: "number" as const },
-          webhookToken: { type: "string" as const },
         },
       },
     },
@@ -147,6 +144,9 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
     id: "agentline",
     label: "AgentLine",
     selectionLabel: "AgentLine (A2A Protocol)",
+    docsPath: "/channels/agentline",
+    docsLabel: "agentline",
+    blurb: "Secure agent-to-agent messaging via the AgentLine A2A protocol (Ed25519 signed envelopes).",
     order: 110,
     quickstartAllowFrom: true,
   },
@@ -252,14 +252,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
           "- AgentLine private key is not configured; messages cannot be signed.",
         );
       }
-      if (
-        account.deliveryMode === "webhook" &&
-        !account.config.webhookToken
-      ) {
-        warnings.push(
-          "- AgentLine webhook mode is enabled but no webhookToken is set; inbound messages will not be verified.",
-        );
-      }
       return warnings;
     },
   },
@@ -309,9 +301,18 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
         const contacts = await client.listContacts();
         const q = query?.trim().toLowerCase() ?? "";
         return contacts
-          .filter((c) => !q || c.agent_id.toLowerCase().includes(q) || c.display_name?.toLowerCase().includes(q))
+          .filter(
+            (c) =>
+              !q ||
+              c.contact_agent_id.toLowerCase().includes(q) ||
+              c.display_name?.toLowerCase().includes(q),
+          )
           .slice(0, limit && limit > 0 ? limit : undefined)
-          .map((c) => ({ kind: "user" as const, id: c.agent_id, name: c.display_name || c.agent_id }));
+          .map((c) => ({
+            kind: "user" as const,
+            id: c.contact_agent_id,
+            name: c.display_name || c.contact_agent_id,
+          }));
       } catch {
         return [];
       }
@@ -344,7 +345,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
       return {
         channel: "agentline",
         ok: true,
-        messageId: result.message_id,
+        messageId: result.hub_msg_id,
       };
     },
     sendMedia: async ({ cfg, to, text, mediaUrl, accountId }) => {
@@ -361,7 +362,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
       return {
         channel: "agentline",
         ok: true,
-        messageId: result.message_id,
+        messageId: result.hub_msg_id,
       };
     },
   },
@@ -408,29 +409,6 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
           abortSignal: ctx.abortSignal,
           log: ctx.log,
         });
-      } else if (mode === "webhook") {
-        const webhookUrl = ctx.runtime.gateway?.getExternalUrl?.();
-        if (webhookUrl) {
-          try {
-            await client.registerEndpoint(
-              `${webhookUrl}/agentline_inbox/${account.accountId}`,
-              account.config.webhookToken,
-            );
-            ctx.log?.info(`[${dp}] webhook endpoint registered`);
-          } catch (err: any) {
-            ctx.log?.error(`[${dp}] failed to register webhook: ${err.message}`);
-          }
-        } else {
-          ctx.log?.warn(`[${dp}] webhook mode but no external URL available, falling back to polling`);
-        }
-        startPoller({
-          client,
-          accountId: account.accountId,
-          cfg: ctx.cfg,
-          intervalMs: account.config.pollIntervalMs || 5000,
-          abortSignal: ctx.abortSignal,
-          log: ctx.log,
-        });
       } else {
         startPoller({
           client,
@@ -442,7 +420,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
         });
       }
 
-      ctx.setStatus({ accountId: ctx.accountId, running: true, lastStartAt: new Date() });
+      ctx.setStatus({ accountId: ctx.accountId, running: true, lastStartAt: Date.now() });
 
       // Keep the promise alive until the gateway signals shutdown via abortSignal.
       // If we return immediately, the gateway considers the channel "stopped" and
@@ -457,7 +435,7 @@ export const agentLinePlugin: ChannelPlugin<ResolvedAgentLineAccount> = {
 
       stopWsClient(account.accountId);
       stopPoller(account.accountId);
-      ctx.setStatus({ accountId: ctx.accountId, running: false, lastStopAt: new Date() });
+      ctx.setStatus({ accountId: ctx.accountId, running: false, lastStopAt: Date.now() });
     },
   },
 };

@@ -229,20 +229,6 @@ describe("resolve", () => {
   });
 });
 
-describe("registerEndpoint", () => {
-  it("registers a webhook endpoint", async () => {
-    const client = makeClient();
-    const result = await client.registerEndpoint(
-      "https://my-bot.test/webhook",
-      "secret-token",
-    );
-    expect(result.ok).toBe(true);
-    expect(hub.state.endpoints).toHaveLength(1);
-    expect(hub.state.endpoints[0].url).toBe("https://my-bot.test/webhook");
-    expect(hub.state.endpoints[0].webhook_token).toBe("secret-token");
-  });
-});
-
 // ── Contacts ─────────────────────────────────────────────────────
 
 describe("contacts", () => {

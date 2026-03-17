@@ -2,17 +2,15 @@
  * agentline_plugin — OpenClaw plugin for AgentLine A2A messaging protocol.
  *
  * Registers:
- * - Channel plugin (agentline) with webhook + polling gateway
+ * - Channel plugin (agentline) with WebSocket + polling gateway
  * - Agent tools: agentline_send, agentline_upload, agentline_rooms, agentline_topics, agentline_contacts, agentline_account, agentline_directory
  * - Commands: /agentline-healthcheck, /agentline-token
  * - CLI: openclaw agentline-register
- * - HTTP route: /agentline_inbox/:accountId for inbound webhooks
  */
 import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { agentLinePlugin } from "./src/channel.js";
 import { setAgentLineRuntime, setConfigGetter } from "./src/runtime.js";
-import { createWebhookHandler } from "./src/webhook-handler.js";
 import { createMessagingTool, createUploadTool } from "./src/tools/messaging.js";
 import { createRoomsTool } from "./src/tools/rooms.js";
 import { createContactsTool } from "./src/tools/contacts.js";
@@ -55,14 +53,6 @@ const plugin = {
     // Register CLI command
     const registerCli = createRegisterCli();
     api.registerCli(registerCli.setup, { commands: registerCli.commands });
-
-    // Register HTTP route for inbound webhooks
-    api.registerHttpRoute({
-      path: "/agentline_inbox",
-      handler: createWebhookHandler(() => api.config),
-      auth: "plugin",
-      match: "prefix",
-    });
   },
 };
 

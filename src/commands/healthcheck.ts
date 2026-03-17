@@ -3,7 +3,11 @@
  *
  * Checks: plugin config, Hub connectivity, token validity, delivery mode status.
  */
-import { resolveAccountConfig, isAccountConfigured } from "../config.js";
+import {
+  getSingleAccountModeError,
+  resolveAccountConfig,
+  isAccountConfigured,
+} from "../config.js";
 import { AgentLineClient } from "../client.js";
 import { getConfig as getAppConfig } from "../runtime.js";
 
@@ -30,6 +34,11 @@ export function createHealthcheckCommand() {
       const cfg = getAppConfig();
       if (!cfg) {
         error("No OpenClaw configuration available");
+        return { text: lines.join("\n") };
+      }
+      const singleAccountError = getSingleAccountModeError(cfg);
+      if (singleAccountError) {
+        error(singleAccountError);
         return { text: lines.join("\n") };
       }
 
@@ -90,10 +99,8 @@ export function createHealthcheckCommand() {
           const r = resolved as Record<string, unknown>;
           ok(`Agent resolved: ${r.display_name || r.agent_id}`);
           if (r.bio) info(`Bio: ${r.bio}`);
-          if (r.has_endpoint) {
-            ok("Webhook endpoint registered on Hub");
-          } else {
-            info("No webhook endpoint registered (plugin uses direct delivery)");
+          if (Array.isArray(r.endpoints) && r.endpoints.length > 0) {
+            info(`Registered endpoints on Hub: ${r.endpoints.length}`);
           }
         }
       } catch (err: any) {

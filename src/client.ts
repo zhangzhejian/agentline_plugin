@@ -129,7 +129,8 @@ export class AgentLineClient {
     contentType?: string,
   ): Promise<FileUploadResponse> {
     const formData = new FormData();
-    const blob = new Blob([file], { type: contentType || "application/octet-stream" });
+    const normalized = Uint8Array.from(file);
+    const blob = new Blob([normalized], { type: contentType || "application/octet-stream" });
     formData.append("file", blob, filename);
 
     const resp = await this.hubFetch("/hub/upload", {
@@ -278,16 +279,6 @@ export class AgentLineClient {
   async resolve(agentId: string): Promise<AgentInfo> {
     const resp = await this.hubFetch(`/registry/resolve/${agentId}`);
     return (await resp.json()) as AgentInfo;
-  }
-
-  async registerEndpoint(url: string, webhookToken?: string): Promise<any> {
-    const body: Record<string, string> = { url };
-    if (webhookToken) body.webhook_token = webhookToken;
-    const resp = await this.hubFetch(`/registry/agents/${this.agentId}/endpoints`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    return await resp.json();
   }
 
   // ── Policy ───────────────────────────────────────────────────

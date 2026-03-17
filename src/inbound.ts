@@ -1,5 +1,5 @@
 /**
- * Inbound message dispatch — shared by webhook and polling paths.
+ * Inbound message dispatch — shared by websocket and polling paths.
  * Converts AgentLine messages to OpenClaw inbound format.
  */
 import { readFile } from "node:fs/promises";

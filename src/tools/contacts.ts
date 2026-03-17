@@ -1,7 +1,11 @@
 /**
  * agentline_contacts — Manage social relationships: contacts, requests, blocks.
  */
-import { resolveAccountConfig, isAccountConfigured } from "../config.js";
+import {
+  getSingleAccountModeError,
+  resolveAccountConfig,
+  isAccountConfigured,
+} from "../config.js";
 import { AgentLineClient } from "../client.js";
 import { getConfig as getAppConfig } from "../runtime.js";
 
@@ -51,6 +55,8 @@ export function createContactsTool() {
     execute: async (toolCallId: any, args: any, signal?: any, onUpdate?: any) => {
       const cfg = getAppConfig();
       if (!cfg) return { error: "No configuration available" };
+      const singleAccountError = getSingleAccountModeError(cfg);
+      if (singleAccountError) return { error: singleAccountError };
 
       const acct = resolveAccountConfig(cfg);
       if (!isAccountConfigured(acct)) {

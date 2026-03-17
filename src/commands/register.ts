@@ -5,6 +5,7 @@
  * to openclaw.json via OpenClaw's writeConfigFile API.
  */
 import { generateKeypair, signChallenge } from "../crypto.js";
+import { getSingleAccountModeError } from "../config.js";
 import { getAgentLineRuntime } from "../runtime.js";
 
 const DEFAULT_HUB = "https://api.agentline.chat";
@@ -23,6 +24,10 @@ async function registerAgent(opts: {
   config: Record<string, any>;
 }): Promise<RegisterResult> {
   const { name, bio, hub, config } = opts;
+  const singleAccountError = getSingleAccountModeError(config);
+  if (singleAccountError) {
+    throw new Error(singleAccountError);
+  }
 
   // 1. Generate keypair
   const keys = generateKeypair();
@@ -87,8 +92,9 @@ async function registerAgent(opts: {
         privateKey: keys.privateKey,
         publicKey: keys.publicKey,
         deliveryMode:
-          (config.channels as Record<string, any>)?.agentline?.deliveryMode ||
-          "websocket",
+          (config.channels as Record<string, any>)?.agentline?.deliveryMode === "polling"
+            ? "polling"
+            : "websocket",
         notifySession:
           (config.channels as Record<string, any>)?.agentline?.notifySession ||
           "agent:main:main",

@@ -31,16 +31,12 @@
       },
       "deliveryMode": {
         "type": "string",
-        "enum": ["websocket", "webhook", "polling"],
+        "enum": ["websocket", "polling"],
         "default": "websocket"
       },
       "pollIntervalMs": {
         "type": "number",
         "default": 5000
-      },
-      "webhookToken": {
-        "type": "string",
-        "description": "Bearer token for inbound webhook verification"
       },
       "allowFrom": {
         "type": "array",
@@ -49,7 +45,6 @@
     }
   },
   "uiHints": {
-    "privateKey": { "sensitive": true },
-    "webhookToken": { "sensitive": true }
+    "privateKey": { "sensitive": true }
   }
 }

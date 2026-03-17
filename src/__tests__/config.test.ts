@@ -5,6 +5,8 @@ import {
   resolveAccountConfig,
   isAccountConfigured,
   countAccounts,
+  getSingleAccountModeError,
+  SINGLE_ACCOUNT_ONLY_MESSAGE,
   displayPrefix,
 } from "../config.js";
 
@@ -143,6 +145,26 @@ describe("countAccounts", () => {
   it("returns 1 for single-account fallback", () => {
     const cfg = { channels: { agentline: { hubUrl: "https://hub.test" } } };
     expect(countAccounts(cfg)).toBe(1);
+  });
+});
+
+// ── getSingleAccountModeError ───────────────────────────────────
+
+describe("getSingleAccountModeError", () => {
+  it("returns null for a single-account config", () => {
+    const cfg = { channels: { agentline: { hubUrl: "https://hub.test" } } };
+    expect(getSingleAccountModeError(cfg)).toBeNull();
+  });
+
+  it("returns the single-account guard message for multi-account configs", () => {
+    const cfg = {
+      channels: {
+        agentline: {
+          accounts: { a: {}, b: {} },
+        },
+      },
+    };
+    expect(getSingleAccountModeError(cfg)).toBe(SINGLE_ACCOUNT_ONLY_MESSAGE);
   });
 });
 

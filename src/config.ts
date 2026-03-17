@@ -1,14 +1,18 @@
 /**
  * Configuration resolution for AgentLine channel.
- * Supports single-account and multi-account setups.
+ * The runtime still understands both flat and account-mapped config shapes,
+ * but the plugin currently operates in single-account mode.
  */
 import type { AgentLineAccountConfig, AgentLineChannelConfig } from "./types.js";
+
+export const SINGLE_ACCOUNT_ONLY_MESSAGE =
+  "AgentLine currently supports only a single configured account. Multi-account support is planned for a future update.";
 
 export function resolveChannelConfig(cfg: any): AgentLineChannelConfig {
   return (cfg?.channels?.agentline ?? {}) as AgentLineChannelConfig;
 }
 
-/** Resolve all account configs, supporting both single and multi-account. */
+/** Resolve all account configs from either flat or account-mapped config. */
 export function resolveAccounts(
   channelCfg: AgentLineChannelConfig,
 ): Record<string, AgentLineAccountConfig> {
@@ -26,7 +30,6 @@ export function resolveAccounts(
       publicKey: channelCfg.publicKey,
       deliveryMode: channelCfg.deliveryMode,
       pollIntervalMs: channelCfg.pollIntervalMs,
-      webhookToken: channelCfg.webhookToken,
       allowFrom: channelCfg.allowFrom,
       notifySession: channelCfg.notifySession,
     },
@@ -50,6 +53,10 @@ export function isAccountConfigured(acct: AgentLineAccountConfig): boolean {
 export function countAccounts(cfg: any): number {
   const channelCfg = resolveChannelConfig(cfg);
   return Object.keys(resolveAccounts(channelCfg)).length;
+}
+
+export function getSingleAccountModeError(cfg: any): string | null {
+  return countAccounts(cfg) > 1 ? SINGLE_ACCOUNT_ONLY_MESSAGE : null;
 }
 
 /** Display prefix for logs and messages. */

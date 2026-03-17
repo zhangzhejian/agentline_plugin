@@ -41,9 +41,8 @@ export type AgentLineAccountConfig = {
   keyId?: string;
   privateKey?: string;
   publicKey?: string;
-  deliveryMode?: "webhook" | "polling" | "websocket";
+  deliveryMode?: "polling" | "websocket";
   pollIntervalMs?: number;
-  webhookToken?: string;
   allowFrom?: string[];
   notifySession?: string;
   accounts?: Record<string, AgentLineAccountConfig>;

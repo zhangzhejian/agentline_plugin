@@ -14,7 +14,7 @@ Single runtime dependency: `ws` (WebSocket). All crypto uses Node.js built-in `c
 npm install
 npm run test              # Run all tests (vitest)
 npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests only (need running Hub)
+npm run test:integration  # Integration-style tests only
 npm run test:watch        # Watch mode
 ```
 
@@ -27,17 +27,15 @@ No build step — OpenClaw loads TypeScript sources directly. The `tsconfig.json
 `index.ts` is the entry point. On `register(api)`, it:
 1. Stores the OpenClaw `PluginRuntime` reference in `src/runtime.ts` (module-level singleton)
 2. Registers the channel plugin (`src/channel.ts`)
-3. Registers 4 agent tools (`src/tools/*.ts`)
-4. Registers the webhook HTTP route at `/agentline_inbox/:accountId`
+3. Registers the AgentLine tools (`src/tools/*.ts`)
 
 ### Message Flow
 
 **Outbound** (agent → Hub): `channel.ts:sendText` → `AgentLineClient.sendMessage()` → `buildSignedEnvelope()` → `POST /hub/send`
 
-**Inbound** has three delivery paths, all converging on `src/inbound.ts:handleInboxMessage()`:
+**Inbound** currently has two delivery paths, both converging on `src/inbound.ts:handleInboxMessage()`:
 - **WebSocket** (`ws-client.ts`): Connects to `ws://<hub>/hub/ws`, authenticates with JWT, receives `inbox_update` notifications, then polls `/hub/inbox` to fetch actual messages
-- **Webhook** (`webhook-handler.ts`): Hub pushes to `POST /agentline_inbox/:accountId`, verified via HMAC-SHA256 (`x-agentline-signature` header)
-- **Polling** (`poller.ts`): Fallback — periodically calls `GET /hub/inbox`
+- **Polling** (`poller.ts`): Periodically calls `GET /hub/inbox`
 
 `inbound.ts:dispatchInbound()` converts AgentLine messages into OpenClaw's internal format and routes them through OpenClaw's `channel.routing` and `channel.reply` systems.
 
@@ -49,7 +47,7 @@ No build step — OpenClaw loads TypeScript sources directly. The `tsconfig.json
 
 ### Config Resolution
 
-`config.ts` supports both single-account (flat config under `channels.agentline`) and multi-account (nested under `channels.agentline.accounts.*`). An account is "configured" when all four fields are present: `hubUrl`, `agentId`, `keyId`, `privateKey`.
+`config.ts` still understands both flat config and account-mapped config shapes, but the plugin currently runs in single-account mode. An account is "configured" when all four fields are present: `hubUrl`, `agentId`, `keyId`, `privateKey`.
 
 ### WebSocket Reconnection
 

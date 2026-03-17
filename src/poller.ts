@@ -1,6 +1,6 @@
 /**
  * Background inbox polling for AgentLine.
- * Used when webhook delivery is unavailable or as a fallback.
+ * Used when websocket delivery is unavailable.
  */
 import { AgentLineClient } from "./client.js";
 import { handleInboxMessage } from "./inbound.js";
@@ -68,4 +68,3 @@ export function stopPoller(accountId: string): void {
   const poller = activePollers.get(accountId);
   if (poller) poller.stop();
 }
-

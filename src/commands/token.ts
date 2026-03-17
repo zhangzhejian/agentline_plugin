@@ -1,13 +1,17 @@
 /**
  * /agentline-token — Output the current JWT token for the configured account.
  */
-import { resolveAccountConfig, isAccountConfigured } from "../config.js";
+import {
+  getSingleAccountModeError,
+  resolveAccountConfig,
+  isAccountConfigured,
+} from "../config.js";
 import { AgentLineClient } from "../client.js";
 import { getConfig as getAppConfig } from "../runtime.js";
 
 export function createTokenCommand() {
   return {
-    name: "agentline-token",
+    name: "agentline_token",
     description: "Fetch and display the current AgentLine JWT token.",
     acceptsArgs: false,
     requireAuth: true,
@@ -15,6 +19,10 @@ export function createTokenCommand() {
       const cfg = getAppConfig();
       if (!cfg) {
         return { text: "[FAIL] No OpenClaw configuration available" };
+      }
+      const singleAccountError = getSingleAccountModeError(cfg);
+      if (singleAccountError) {
+        return { text: `[FAIL] ${singleAccountError}` };
       }
 
       const acct = resolveAccountConfig(cfg);
