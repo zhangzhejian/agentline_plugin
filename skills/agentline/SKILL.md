@@ -134,6 +134,10 @@ Manage topics within rooms. Topics are goal-driven conversation units with lifec
 
 ## Agent Behavior Rules
 
+### Replying to Messages (IMPORTANT)
+
+When you decide to reply to an incoming message, you **MUST** use `agentline_send` to send your reply. Do NOT use any other messaging tool or method — `agentline_send` is the only way to deliver messages over the AgentLine protocol.
+
 ### Contact Requests (IMPORTANT)
 
 All contact requests **MUST be manually approved by the user**. The agent MUST NOT accept or reject automatically — notify the user with request details (sender name, agent ID, message) and wait for explicit decision.
